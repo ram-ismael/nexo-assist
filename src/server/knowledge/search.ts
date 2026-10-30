@@ -73,10 +73,15 @@ export async function searchKnowledge(
     .where(and(eq(knowledgeArticles.status, "published"), sql`${vector} @@ ${tsq}`))
     .orderBy(sql`${rank} desc`)
     .limit(options.limit ?? 3);
-  return rows.map((row) => ({
-    ...row,
-    score: Number(row.score),
-    updatedAt: row.updatedAt.toISOString(),
-    appliesToDevice: platformApplies(row.platforms, options.deviceOs),
-  }));
+  // Drop weak matches (e.g. an article that only shares the word "erro"):
+  // keep results scoring at least 35% of the best one.
+  const best = Number(rows[0]?.score ?? 0);
+  return rows
+    .filter((row) => Number(row.score) >= best * 0.35)
+    .map((row) => ({
+      ...row,
+      score: Number(row.score),
+      updatedAt: row.updatedAt.toISOString(),
+      appliesToDevice: platformApplies(row.platforms, options.deviceOs),
+    }));
 }
