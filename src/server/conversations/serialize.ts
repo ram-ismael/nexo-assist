@@ -81,9 +81,26 @@ export async function serializeMessages(
 
 /** A typing signal stays valid this long; clients refresh it every ~3 s while typing. */
 export const TYPING_TTL_MS = 6_000;
+/** The employee's chat polls every 2–3.5 s while visible; 20 s without one means away. */
+export const ONLINE_TTL_MS = 20_000;
 
 function typingNow(at: Date | null, now: number): boolean {
   return !!at && now - at.getTime() < TYPING_TTL_MS;
+}
+
+export function employeeOnline(seenAt: Date | null, now = Date.now()): boolean {
+  return !!seenAt && now - seenAt.getTime() < ONLINE_TTL_MS;
+}
+
+export function employeeTyping(
+  conversation: { state: string; employeeTypingAt: Date | null },
+  now = Date.now(),
+): boolean {
+  return (
+    conversation.state !== "closed" &&
+    conversation.state !== "agent_active" &&
+    typingNow(conversation.employeeTypingAt, now)
+  );
 }
 
 export async function serializeConversation(
@@ -130,13 +147,11 @@ export async function serializeConversation(
     agentBusy: busy,
     typing: {
       // Only meaningful while a person is on the other side.
-      employee:
-        conversation.state !== "closed" &&
-        conversation.state !== "agent_active" &&
-        typingNow(conversation.employeeTypingAt, Date.now()),
+      employee: employeeTyping(conversation),
       analyst:
         conversation.state === "analyst_active" &&
         typingNow(conversation.analystTypingAt, Date.now()),
     },
+    employeeOnline: employeeOnline(conversation.employeeSeenAt),
   };
 }

@@ -165,6 +165,8 @@ export const conversations = pgTable(
     /** Last keystroke signal from each side, for "está escrevendo…" (short TTL). */
     employeeTypingAt: timestamp("employee_typing_at", { withTimezone: true }),
     analystTypingAt: timestamp("analyst_typing_at", { withTimezone: true }),
+    /** Last poll from the employee's open, visible chat: drives "online" in the console. */
+    employeeSeenAt: timestamp("employee_seen_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     version: integer("version").notNull().default(1),
     ...timestamps,

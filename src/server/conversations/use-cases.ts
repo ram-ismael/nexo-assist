@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { config } from "@/lib/config";
 import type { SessionUser } from "@/server/auth/sessions";
 import { db } from "@/server/db/client";
@@ -307,4 +307,25 @@ export async function signalTyping(
           )
           .returning({ id: conversations.id });
   return rows.length > 0;
+}
+
+/**
+ * The employee's chat is open and visible (it is polling): record it for the
+ * console's "online". Written at most every 10 s per conversation, so polling
+ * does not turn into a write per request.
+ */
+export async function touchEmployeePresence(employeeId: string, conversationId: string) {
+  await db()
+    .update(conversations)
+    .set({ employeeSeenAt: new Date() })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        eq(conversations.employeeId, employeeId),
+        or(
+          isNull(conversations.employeeSeenAt),
+          lt(conversations.employeeSeenAt, sql`now() - interval '10 seconds'`),
+        ),
+      ),
+    );
 }

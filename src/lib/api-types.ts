@@ -59,6 +59,8 @@ export type ConversationDTO = {
   agentBusy: boolean;
   /** Who is typing right now (signals younger than TYPING_TTL_MS). */
   typing: { employee: boolean; analyst: boolean };
+  /** The employee has this chat open and visible right now. */
+  employeeOnline: boolean;
 };
 
 export type MessagePageDTO = {
@@ -150,6 +152,8 @@ export type QueueItemDTO = {
     createdAt: string;
   } | null;
   lowCertainty: boolean;
+  employeeTyping: boolean;
+  employeeOnline: boolean;
 };
 
 export type ApiError = {
@@ -175,4 +179,6 @@ export type ConversationDetailDTO = {
 export type QueueResponseDTO = {
   items: QueueItemDTO[];
   counts: Record<"all" | "for_you" | "with_agent" | "mine", number>;
+  /** Waiting conversations plus the analyst's own with unread messages: the rail badge. */
+  attention: number;
 };

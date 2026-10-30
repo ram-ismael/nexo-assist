@@ -10,6 +10,7 @@ import {
   users,
 } from "@/server/db/schema";
 import { HANDOFF_REASON_LABEL } from "./handoff";
+import { employeeOnline, employeeTyping } from "./serialize";
 
 export const QUEUE_FILTERS = ["all", "for_you", "with_agent", "mine"] as const;
 export type QueueFilter = (typeof QUEUE_FILTERS)[number];
@@ -170,6 +171,8 @@ export async function listQueue(
           : null,
       lowCertainty:
         conversation.state === "agent_active" && certainty.get(conversation.id) === "baixa",
+      employeeTyping: employeeTyping(conversation),
+      employeeOnline: employeeOnline(conversation.employeeSeenAt),
     };
   });
 }
@@ -177,13 +180,14 @@ export async function listQueue(
 export async function queueCounts(
   executor: Executor,
   analystId: string,
-): Promise<Record<QueueFilter, number>> {
+): Promise<Record<QueueFilter, number> & { attention: number }> {
   const result = await executor.execute<{
     for_you: number;
     with_agent: number;
     mine: number;
     open: number;
     recently_closed: number;
+    mine_unread: number;
   }>(sql`
     select
       count(*) filter (where state = 'waiting_analyst')::int as for_you,
@@ -191,7 +195,15 @@ export async function queueCounts(
       count(*) filter (where state = 'analyst_active' and assigned_analyst_id = ${analystId})::int as mine,
       count(*)::int as open,
       (select count(*)::int from conversations
-        where state = 'closed' and closed_at > now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})) as recently_closed
+        where state = 'closed' and closed_at > now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})) as recently_closed,
+      count(*) filter (
+        where state = 'analyst_active' and assigned_analyst_id = ${analystId}
+          and exists (
+            select 1 from messages m
+            where m.conversation_id = conversations.id and m.kind = 'employee'
+              and m.seq > conversations.analyst_read_seq
+          )
+      )::int as mine_unread
     from conversations
     where state in ('agent_active', 'waiting_analyst', 'analyst_active')
   `);
@@ -201,6 +213,7 @@ export async function queueCounts(
     with_agent: Number(row?.with_agent ?? 0),
     mine: Number(row?.mine ?? 0),
     all: Number(row?.open ?? 0) + Number(row?.recently_closed ?? 0),
+    attention: Number(row?.for_you ?? 0) + Number(row?.mine_unread ?? 0),
   };
 }
 

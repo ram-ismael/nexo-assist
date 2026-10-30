@@ -37,7 +37,8 @@ export const GET = route("user", async ({ req, user }) => {
     listQueue(db(), user.id, { filter: params.filter, query: params.q }),
     queueCounts(db(), user.id),
   ]);
-  return json({ items, counts });
+  const { attention, ...filterCounts } = counts;
+  return json({ items, counts: filterCounts, attention });
 });
 
 /**

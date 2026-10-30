@@ -158,10 +158,16 @@ export function ConversationPanel({
         >
           <ArrowLeft className="size-5" />
         </button>
-        <Avatar name={conversation.employee.name} />
+        <Avatar
+          name={conversation.employee.name}
+          online={conversation.employeeOnline || undefined}
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[17px] font-medium">{conversation.employee.name}</p>
           <p className="text-ink-3 truncate text-[14px]">
+            {conversation.employeeOnline ? (
+              <span className="text-success-text">online · </span>
+            ) : null}
             {conversation.employee.department}
             {detail?.focusTicketNumber ? ` · ${detail.focusTicketNumber}` : ""}
           </p>

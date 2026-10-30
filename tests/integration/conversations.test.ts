@@ -9,7 +9,7 @@ import {
   getOrCreateLiveConversation,
   pageMessages,
 } from "@/server/conversations/repository";
-import { listQueue, queueCounts } from "@/server/conversations/queue";
+import { listQueue, markRead, queueCounts } from "@/server/conversations/queue";
 import { serializeConversation } from "@/server/conversations/serialize";
 import {
   claimConversation,
@@ -19,6 +19,7 @@ import {
   postAnalystMessage,
   returnToAgent,
   signalTyping,
+  touchEmployeePresence,
 } from "@/server/conversations/use-cases";
 import { createTicketDraft, editDraft, findDraftForEmployee } from "@/server/tickets/drafts";
 import { ANA, calendar, CARLA, MARINA, RAFAEL, resetDatabase, sessionUser } from "../support/db";
@@ -179,6 +180,7 @@ describe("conversation lifecycle", () => {
       with_agent: 0,
       mine: 0,
       all: 2,
+      attention: 1,
     });
     const all = await listQueue(db(), rafael.id, { filter: "all", query: "" });
     expect(all.map((item) => item.id).sort()).toEqual([conversation.id, recent.id].sort());
@@ -229,6 +231,43 @@ describe("conversation lifecycle", () => {
     const stored = await findConversation(db(), conversation.id);
     if (!stored) throw new Error("conversation missing");
     expect((await serializeConversation(db(), stored, 30)).typing.employee).toBe(false);
+  });
+
+  it("counts what needs the analyst: waiting plus own conversations with unread messages", async () => {
+    const { ana, conversation } = await waitingConversation();
+    const rafael = await sessionUser(RAFAEL);
+    expect((await queueCounts(db(), rafael.id)).attention).toBe(1);
+    await claimConversation(rafael, conversation.id);
+    await markRead(db(), conversation.id);
+    expect((await queueCounts(db(), rafael.id)).attention).toBe(0);
+    await appendMessage(db(), {
+      conversationId: conversation.id,
+      kind: "employee",
+      senderId: ana.id,
+      content: "Ainda está lento.",
+    });
+    expect((await queueCounts(db(), rafael.id)).attention).toBe(1);
+    const [item] = await listQueue(db(), rafael.id, { filter: "mine", query: "" });
+    expect(item?.unread).toBe(1);
+  });
+
+  it("shows the employee online only while their chat is open", async () => {
+    const { ana, conversation } = await waitingConversation();
+    const rafael = await sessionUser(RAFAEL);
+    let [item] = await listQueue(db(), rafael.id, { filter: "for_you", query: "" });
+    expect(item?.employeeOnline).toBe(false);
+    await touchEmployeePresence(ana.id, conversation.id);
+    [item] = await listQueue(db(), rafael.id, { filter: "for_you", query: "" });
+    expect(item?.employeeOnline).toBe(true);
+    // Another employee's poll never marks this conversation.
+    const carla = await sessionUser(CARLA);
+    await db()
+      .update(conversations)
+      .set({ employeeSeenAt: new Date(Date.now() - 60_000) })
+      .where(eq(conversations.id, conversation.id));
+    await touchEmployeePresence(carla.id, conversation.id);
+    [item] = await listQueue(db(), rafael.id, { filter: "for_you", query: "" });
+    expect(item?.employeeOnline).toBe(false);
   });
 
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {

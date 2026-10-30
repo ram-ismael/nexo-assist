@@ -7,7 +7,7 @@ import { db } from "@/server/db/client";
 import { json, route } from "@/server/http";
 import { findConversation, pageMessages } from "@/server/conversations/repository";
 import { serializeConversation, serializeMessages } from "@/server/conversations/serialize";
-import { recoverAbandonedTurns } from "@/server/conversations/use-cases";
+import { recoverAbandonedTurns, touchEmployeePresence } from "@/server/conversations/use-cases";
 
 const query = z.object({
   before: z.coerce.number().int().positive().optional(),
@@ -22,6 +22,8 @@ const query = z.object({
 export const GET = route<"user", { id: string }>("user", async ({ req, user, params }) => {
   let conversation = await findConversation(db(), params.id);
   assertCanViewConversation(user, conversation);
+  // Polls only run while the tab is visible, so this is real presence.
+  if (user.role === "employee") await touchEmployeePresence(user.id, conversation.id);
   if (await recoverAbandonedTurns(conversation.id)) {
     conversation = (await findConversation(db(), params.id)) ?? conversation;
   }

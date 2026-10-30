@@ -40,6 +40,7 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 | CSP com nonce sem violações; novo login revoga a sessão anterior  | `e2e/auth.spec.ts`                                      |
 | "Escrevendo…" só de quem está na conversa; expira; some ao enviar | `conversations.test.ts`, `e2e/typing.spec.ts`           |
 | Resposta da IA em tempo real, sem bolha duplicada                 | `e2e/typing.spec.ts`                                    |
+| Contador de atenção (fila + minhas não lidas) e presença online   | `conversations.test.ts`                                 |
 | Celular sem rolagem horizontal                                    | `e2e/mobile.spec.ts`                                    |
 | Decisões do agent nos cenários do PRD                             | `tests/eval/agent-eval.test.ts`                         |
 
@@ -47,7 +48,7 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 
 Execução local de 30/10/2026 (Node 26, PostgreSQL 18):
 
-- `pnpm test`: 43 unitários + 33 de integração, todos passando.
+- `pnpm test`: 43 unitários + 35 de integração, todos passando.
 - `pnpm test:e2e`: 14 passando contra o build de produção (`CI=1`, `next start`, sem retentativas).
 - `pnpm eval:agent`: **não executado**, por falta da chave da Anthropic neste ambiente (os 15 cenários aparecem como _skipped_).
 

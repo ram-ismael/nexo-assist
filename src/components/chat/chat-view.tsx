@@ -2,7 +2,7 @@
 
 import { Clock3, Headset, History, MoreHorizontal, Plus, RotateCcw, WifiOff } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
@@ -125,6 +125,32 @@ export function ChatView({
   // dropped connection): show it, and hold new messages the server would refuse.
   const processingElsewhere = !pending && !!conversation?.agentBusy && state === "agent_active";
   const withPerson = state === "waiting_analyst" || state === "analyst_active";
+
+  // Replies that arrive while this tab is in the background show up in its
+  // title, "(2) Atendimento", until the employee looks at it again.
+  const [unseenReplies, setUnseenReplies] = useState(0);
+  const seenSeq = useRef(lastMessage?.seq ?? 0);
+  useEffect(() => {
+    const fresh = messages.filter(
+      (message) =>
+        message.seq > seenSeq.current && (message.kind === "analyst" || message.kind === "agent"),
+    ).length;
+    seenSeq.current = lastMessage?.seq ?? seenSeq.current;
+    if (fresh > 0 && document.visibilityState === "hidden") {
+      setUnseenReplies((count) => count + fresh);
+    }
+  }, [messages, lastMessage?.seq]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setUnseenReplies(0);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+  useEffect(() => {
+    const base = "Atendimento · Nexo Assist";
+    document.title = unseenReplies > 0 ? `(${unseenReplies}) ${base}` : base;
+  }, [unseenReplies]);
   const typingSignal = useTypingSignal(conversation?.id, withPerson && !viewing);
   const analystTyping =
     state === "analyst_active" && !!conversation?.typing.analyst && !viewing

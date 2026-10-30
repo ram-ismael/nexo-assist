@@ -207,7 +207,7 @@ export function QueuePanel({
                     selected ? "bg-desk" : "hover:bg-desk/70",
                   )}
                 >
-                  <Avatar name={item.employee.name} />
+                  <Avatar name={item.employee.name} online={item.employeeOnline || undefined} />
                   <span className="border-rule min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="text-ink truncate text-[16px] font-medium">
@@ -224,7 +224,9 @@ export function QueuePanel({
                     </span>
                     <span className="mt-0.5 flex items-center gap-2">
                       <span className="text-ink-2 flex min-w-0 flex-1 items-center gap-1 truncate text-[14px]">
-                        {item.lastMessageKind === "agent" ? (
+                        {item.employeeTyping ? (
+                          <span className="text-success-text truncate italic">digitando…</span>
+                        ) : item.lastMessageKind === "agent" ? (
                           <>
                             <CheckCheck
                               className="text-primary size-3.5 shrink-0"
@@ -239,9 +241,13 @@ export function QueuePanel({
                         )}
                       </span>
                       {unread ? (
-                        <span className="bg-cta flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white">
+                        // Keyed by count: the badge pops in again when a new message lands.
+                        <span
+                          key={item.unread}
+                          className="bg-cta animate-pop flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold text-white tabular-nums"
+                        >
                           <span className="sr-only">mensagens não lidas: </span>
-                          {item.unread}
+                          {item.unread > 99 ? "99+" : item.unread}
                         </span>
                       ) : null}
                     </span>

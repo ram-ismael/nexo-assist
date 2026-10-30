@@ -122,7 +122,13 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
     void queryClient.invalidateQueries({ queryKey: ["tickets"] });
   };
 
-  const forYou = queue.data?.counts.for_you ?? 0;
+  const attention = queue.data?.attention ?? 0;
+  // The count also lives in the tab title, so it is seen from another tab.
+  useEffect(() => {
+    const base = "Console do analista · Nexo Assist";
+    document.title = attention > 0 ? `(${attention}) ${base}` : base;
+    // Re-applied on navigation too: selecting a conversation changes the URL.
+  }, [attention, selectedId]);
   const available = presence.data?.available ?? true;
 
   return (
@@ -135,13 +141,16 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
         <button
           type="button"
           onClick={() => setFilter("for_you")}
-          aria-label={`Conversas aguardando atendente: ${forYou}`}
+          aria-label={`Conversas que precisam de você: ${attention}`}
           className="bg-paper relative mt-8 flex size-12 items-center justify-center rounded-xl shadow-[0_2px_8px_rgba(27,36,49,0.1)]"
         >
           <MessageCircle className="size-6" aria-hidden="true" />
-          {forYou > 0 ? (
-            <span className="bg-cta absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white">
-              {forYou}
+          {attention > 0 ? (
+            <span
+              key={attention}
+              className="bg-cta animate-pop ring-paper absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white tabular-nums ring-2"
+            >
+              {attention > 99 ? "99+" : attention}
             </span>
           ) : null}
         </button>
