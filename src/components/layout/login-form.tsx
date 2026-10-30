@@ -96,11 +96,12 @@ export function LoginForm() {
             id="password"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
+            placeholder="••••••••"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             aria-invalid={!!errors.password}
             aria-describedby={errors.password ? "password-error" : undefined}
-            className="text-ink h-full flex-1 bg-transparent text-[15px] tracking-wide outline-none"
+            className="text-ink placeholder:text-ink-4 h-full flex-1 bg-transparent text-[15px] tracking-wide outline-none placeholder:tracking-[0.18em]"
           />
           <button
             type="button"
