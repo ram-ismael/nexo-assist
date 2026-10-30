@@ -71,7 +71,8 @@ function TicketSelection({
 }) {
   const [chosen, setChosen] = useState<string | null>(null);
   return (
-    <fieldset className="border-rule bg-paper w-full overflow-hidden rounded-xl border shadow-[0_2px_8px_rgba(27,36,49,0.06)]">
+    // min-w-0: a fieldset defaults to min-content width and would overflow narrow columns.
+    <fieldset className="border-rule bg-paper w-full min-w-0 overflow-hidden rounded-xl border shadow-[0_2px_8px_rgba(27,36,49,0.06)]">
       <legend className="sr-only">{block.prompt}</legend>
       {block.tickets.map((ticket, index) => {
         const selected = chosen === ticket.number;
@@ -103,7 +104,7 @@ function TicketSelection({
             <span className="text-ink min-w-0 flex-1 truncate text-[15px] font-medium">
               {ticket.title}
             </span>
-            <span className="text-ink-2 hidden items-center gap-1.5 text-[14px] sm:inline-flex">
+            <span className="text-ink-2 hidden shrink-0 items-center gap-1.5 text-[14px] whitespace-nowrap sm:inline-flex">
               <Dot className={statusDotClass(ticket.status)} />
               {STATUS_LABEL[ticket.status]}
               {ticket.overdue ? <span className="text-warning-text">· vencido</span> : null}

@@ -312,6 +312,7 @@ export function ConversationPanel({
               maxLength={4000}
               busy={outgoing !== null}
               typing={typingSignal}
+              autoFocus
               onSend={reply}
             />
           </>

@@ -38,6 +38,7 @@ export function Composer({
   variant = "employee",
   maxLength = MAX_LENGTH,
   typing,
+  autoFocus,
 }: {
   draftKey: string;
   placeholder: string;
@@ -48,6 +49,8 @@ export function Composer({
   maxLength?: number;
   /** "Está escrevendo…" signal for the other person, when one is listening. */
   typing?: { onTextChange: (text: string) => void; onBlur: () => void; onSent: () => void };
+  /** Ready to type as soon as it appears (e.g. right after assuming a conversation). */
+  autoFocus?: boolean;
 }) {
   // The draft lives only in this browser; the server render always starts empty.
   const [value, setValue] = useState(() =>
@@ -103,6 +106,7 @@ export function Composer({
           id={`composer-${draftKey}`}
           ref={textarea}
           rows={1}
+          autoFocus={autoFocus}
           suppressHydrationWarning
           value={value}
           disabled={disabled}

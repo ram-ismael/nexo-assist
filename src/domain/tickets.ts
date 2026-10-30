@@ -57,6 +57,13 @@ export const SCOPE_LABEL: Record<AffectedScope, string> = {
   company: "Toda a empresa",
 };
 
+/** The same scopes seen from the service desk side (the employee is not "você"). */
+export const SCOPE_LABEL_DESK: Record<AffectedScope, string> = {
+  self: "Só quem abriu",
+  team: "Equipe",
+  company: "Toda a empresa",
+};
+
 export const TYPE_LABEL: Record<TicketType, string> = {
   INC: "Incidente",
   REQ: "Requisição",

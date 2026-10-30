@@ -37,7 +37,7 @@ DATABASE_URL="<string direta do Neon>" pnpm db:migrate
 DATABASE_URL="<string direta do Neon>" pnpm db:seed   # idempotente; só insere o que falta
 ```
 
-As migrações deste projeto são aditivas. Uma migração destrutiva precisaria de revisão manual e backup (branch do Neon) antes.
+`pnpm db:seed` também grava o histórico de conversas de demonstração (só para quem ainda não tem conversa; nunca altera uso real). As migrações deste projeto são aditivas. Uma migração destrutiva precisaria de revisão manual e backup (branch do Neon) antes.
 
 ## Deploy da aplicação
 

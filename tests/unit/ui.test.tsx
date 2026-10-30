@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mergeMessages } from "@/components/chat/use-chat";
 import { TicketCard } from "@/components/tickets/ticket-card";
 import type { MessageDTO, TicketSnapshot } from "@/lib/api-types";
-import { contactLabel, formatListTime, untilLabel } from "@/lib/format";
+import { contactLabel, durationLabel, formatListTime, untilLabel } from "@/lib/format";
 
 afterEach(cleanup);
 
@@ -85,5 +85,15 @@ describe("contactLabel", () => {
   it("says how late the contact is once the deadline passed", () => {
     expect(contactLabel(at(-10), tz, now)).toBe("contato atrasado há 10 min");
     expect(contactLabel(at(-130), tz, now)).toBe("contato atrasado há 2 h");
+    expect(contactLabel(at(-3 * 24 * 60), tz, now)).toBe("contato atrasado há 3 dias");
+  });
+});
+
+describe("durationLabel", () => {
+  it("rounds to the unit a person would say", () => {
+    expect(durationLabel(25 * 60_000)).toBe("25 min");
+    expect(durationLabel(4 * 3_600_000)).toBe("4 h");
+    expect(durationLabel(26 * 3_600_000)).toBe("1 dia");
+    expect(durationLabel(6 * 86_400_000)).toBe("6 dias");
   });
 });

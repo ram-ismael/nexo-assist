@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { errorFields, log } from "@/server/log";
+import { DEMO_SEED_MODEL } from "@/server/db/demo";
 
 export type PublicMetrics = {
   avgFirstResponseSeconds: number | null;
@@ -37,6 +38,8 @@ export async function publicMetrics(): Promise<PublicMetrics> {
         select coalesce(first_token_ms, latency_ms) as ms
         from agent_turns
         where status = 'completed' and started_at > now() - interval '7 days'
+          and model <> ${DEMO_SEED_MODEL}
+          and coalesce(first_token_ms, latency_ms) is not null
       ),
       recent_conversations as (
         select c.id, exists (select 1 from handoffs h where h.conversation_id = c.id) as handed_off
@@ -44,6 +47,7 @@ export async function publicMetrics(): Promise<PublicMetrics> {
         where exists (
           select 1 from agent_turns t
           where t.conversation_id = c.id and t.status = 'completed' and t.started_at > now() - interval '30 days'
+            and t.model <> ${DEMO_SEED_MODEL}
         )
       )
       select

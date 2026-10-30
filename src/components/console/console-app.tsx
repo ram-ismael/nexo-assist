@@ -10,7 +10,7 @@ import {
 import { LogOut, MessageCircle } from "lucide-react";
 import { Dialog as RadixDialog, DropdownMenu } from "radix-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ConversationDetailDTO, QueueResponseDTO, TicketListItemDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -96,6 +96,10 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query, 300);
   const [ticketsOpen, setTicketsOpen] = useState(false);
+  const drawerSubview = useRef(false);
+  const setDrawerSubview = useCallback((open: boolean) => {
+    drawerSubview.current = open;
+  }, []);
   // Wide screens dock the tickets panel; the analyst may hide it for more chat
   // width. A per-browser convenience kept in local storage (never authoritative).
   const docked = useSyncExternalStore(subscribeDock, readDock, () => true);
@@ -285,6 +289,7 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
             )}
           >
             <TicketsPanel
+              key={detail.data.conversation.employee.id}
               employeeName={detail.data.conversation.employee.name}
               tickets={tickets.data?.items}
               loading={tickets.isLoading}
@@ -301,11 +306,17 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
               <RadixDialog.Content
                 aria-describedby={undefined}
                 className="animate-slide-in fixed top-0 right-0 z-50 h-dvh w-full max-w-[420px] shadow-xl focus:outline-none 2xl:hidden"
+                // Inside a sub-screen, Esc means "back" (handled by the panel), not "close".
+                onEscapeKeyDown={(event) => {
+                  if (drawerSubview.current) event.preventDefault();
+                }}
               >
                 <RadixDialog.Title className="sr-only">
                   Chamados de {detail.data.conversation.employee.name}
                 </RadixDialog.Title>
                 <TicketsPanel
+                  key={detail.data.conversation.employee.id}
+                  onSubviewChange={setDrawerSubview}
                   employeeName={detail.data.conversation.employee.name}
                   tickets={tickets.data?.items}
                   loading={tickets.isLoading}

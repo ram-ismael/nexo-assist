@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { assistantStatusFrom, type AssistantStatus, type RecentTurn } from "@/domain/assistant";
 import { config } from "@/lib/config";
 import { db } from "@/server/db/client";
+import { DEMO_SEED_MODEL } from "@/server/db/demo";
 import { errorFields, log } from "@/server/log";
 
 const CACHE_MS = 30_000;
@@ -27,6 +28,7 @@ export async function assistantStatus(now = Date.now()): Promise<AssistantStatus
       const result = await db().execute<{ status: string; error_code: string | null }>(sql`
         select status, error_code from agent_turns
         where started_at > now() - interval '15 minutes' and status in ('completed', 'failed')
+          and model <> ${DEMO_SEED_MODEL}
         order by started_at desc
         limit 3
       `);

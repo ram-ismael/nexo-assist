@@ -195,7 +195,11 @@ export function QueuePanel({
             className="placeholder:text-ink-3 h-full flex-1 bg-transparent text-[15px] outline-none"
           />
         </label>
-        <div role="group" aria-label="Filtrar conversas" className="mt-3 flex flex-wrap gap-1.5">
+        <div
+          role="group"
+          aria-label="Filtrar conversas"
+          className="mt-3 flex w-full justify-between gap-1.5"
+        >
           {FILTERS.map((item) => {
             const active = filter === item.id;
             const count = data?.counts[item.id];
@@ -206,7 +210,9 @@ export function QueuePanel({
                 aria-pressed={active}
                 onClick={() => onFilter(item.id)}
                 className={cn(
-                  "h-8 rounded-full px-2.5 text-[14px] whitespace-nowrap transition-colors",
+                  // Chips grow with their content to span the row (aligned with the
+                  // search field above) and re-flow with the panel width.
+                  "h-8 flex-auto rounded-full px-2 text-[13px] whitespace-nowrap transition-colors",
                   active
                     ? "bg-primary-soft text-primary-text font-medium"
                     : "bg-desk text-ink-2 hover:bg-rule",
@@ -214,7 +220,7 @@ export function QueuePanel({
               >
                 {item.label}
                 {item.id !== "all" && count !== undefined ? (
-                  <span className="ml-1.5 tabular-nums">{count}</span>
+                  <span className="ml-1.5 font-semibold tabular-nums">{count}</span>
                 ) : null}
               </button>
             );
@@ -272,11 +278,15 @@ export function QueuePanel({
                   onClick={() => onSelect(item.id)}
                   aria-current={selected ? "true" : undefined}
                   className={cn(
-                    "flex w-full gap-3 rounded-xl px-3 py-3.5 text-left transition-colors duration-150",
+                    "flex w-full items-center gap-3.5 rounded-xl px-3 py-3.5 text-left transition-colors duration-150",
                     selected ? "bg-desk" : "hover:bg-desk/70",
                   )}
                 >
-                  <Avatar name={item.employee.name} online={item.employeeOnline || undefined} />
+                  <Avatar
+                    name={item.employee.name}
+                    size="lg"
+                    online={item.employeeOnline || undefined}
+                  />
                   <span className="border-rule min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="text-ink truncate text-[16px] font-medium">

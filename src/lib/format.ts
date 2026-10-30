@@ -90,21 +90,24 @@ export function untilLabel(iso: string, timeZone: string, now = new Date()): str
   return `${label === "Ontem" || label === "Amanhã" ? label.toLowerCase() : label}, ${time}`;
 }
 
+/** "25 min", "4 h", "1 dia", "3 dias": short elapsed or remaining time. */
+export function durationLabel(ms: number): string {
+  const minutes = Math.max(1, Math.round(Math.abs(ms) / 60_000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 dia" : `${days} dias`;
+}
+
 /**
  * Countdown to a first-contact deadline, as the analyst reads it in the queue:
  * "contato em 25 min", "contato em 3 h", "contato até seg., 14:00" beyond a
- * day, and "contato atrasado há 10 min" once it has passed.
+ * day, and "contato atrasado há 10 min" (or "há 2 dias") once it has passed.
  */
 export function contactLabel(iso: string, timeZone: string, now = new Date()): string {
   const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60_000);
-  if (minutes < 0) {
-    const late = -minutes;
-    return late < 60
-      ? `contato atrasado há ${late} min`
-      : late < 24 * 60
-        ? `contato atrasado há ${Math.round(late / 60)} h`
-        : `contato atrasado desde ${untilLabel(iso, timeZone, now)}`;
-  }
+  if (minutes < 0) return `contato atrasado há ${durationLabel(minutes * 60_000)}`;
   if (minutes < 1) return "contato agora";
   if (minutes < 60) return `contato em ${minutes} min`;
   if (minutes < 24 * 60) return `contato em ${Math.round(minutes / 60)} h`;

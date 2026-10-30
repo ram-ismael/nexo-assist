@@ -47,7 +47,8 @@ export function Avatar({
       {online !== undefined ? (
         <span
           className={cn(
-            "border-paper absolute right-0 bottom-0 size-3 rounded-full border-2",
+            "border-paper absolute right-0 bottom-0 rounded-full border-2",
+            size === "lg" ? "size-3.5" : "size-3",
             online ? "bg-success" : "bg-ink-4",
           )}
           aria-label={online ? "online" : "offline"}

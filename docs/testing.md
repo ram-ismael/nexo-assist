@@ -43,6 +43,7 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 | Contador de atenção (fila + minhas não lidas) e presença online   | `conversations.test.ts`                                 |
 | Fila ordenada pelo prazo de contato; crítico, agent respondendo   | `conversations.test.ts`                                 |
 | Contagem regressiva "contato em 25 min" / "atrasado há 10 min"    | `tests/unit/ui.test.tsx`                                |
+| Histórico de demonstração idempotente e fora das métricas         | `tests/integration/seed-conversations.test.ts`          |
 | Celular sem rolagem horizontal                                    | `e2e/mobile.spec.ts`                                    |
 | Decisões do agent nos cenários do PRD                             | `tests/eval/agent-eval.test.ts`                         |
 
@@ -50,7 +51,7 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 
 Execução local de 30/10/2026 (Node 26, PostgreSQL 18):
 
-- `pnpm test`: 45 unitários + 36 de integração, todos passando.
+- `pnpm test`: 46 unitários + 38 de integração, todos passando.
 - `pnpm test:e2e`: 14 passando contra o build de produção (`CI=1`, `next start`, sem retentativas).
 - `pnpm eval:agent`: **não executado**, por falta da chave da Anthropic neste ambiente (os 15 cenários aparecem como _skipped_).
 
