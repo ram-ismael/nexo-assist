@@ -34,6 +34,19 @@ export default defineConfig({
           hookTimeout: 60_000,
         },
       },
+      {
+        extends: true,
+        test: {
+          name: "eval",
+          include: ["tests/eval/**/*.test.ts"],
+          environment: "node",
+          setupFiles: ["tests/support/integration-env.ts", "tests/support/eval-env.ts"],
+          globalSetup: ["tests/support/global-setup.ts"],
+          fileParallelism: false,
+          testTimeout: 120_000,
+          hookTimeout: 60_000,
+        },
+      },
     ],
   },
 });
