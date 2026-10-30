@@ -153,8 +153,10 @@ export async function liveShowcase(timeZone: string): Promise<LiveShowcase | nul
         (select priority from last_ticket) as ticket_priority,
         (select sla from last_ticket) as ticket_sla,
         (select at from last_ticket) as ticket_at,
+        -- Same criterion as "último atendimento": conversations the assistant answered.
         (select count(distinct conversation_id)::int from agent_turns
-          where model <> ${DEMO_SEED_MODEL} and started_at >= (select start from day)) as conversations,
+          where model <> ${DEMO_SEED_MODEL} and status = 'completed'
+            and started_at >= (select start from day)) as conversations,
         (select count(*)::int from ticket_drafts
           where status = 'confirmed' and kind = 'create' and updated_at >= (select start from day)) as tickets,
         (select count(*)::int from handoffs h

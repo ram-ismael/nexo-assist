@@ -96,6 +96,13 @@ describe("agent turns (scripted model, real tools and database)", () => {
     expect(after?.lastTurn?.steps.length).toBeGreaterThan(0);
     expect(JSON.stringify(after)).not.toMatch(/INC-|REQ-|Gabriela|Rocha/);
     expect(after?.today.conversations).toBe(1);
+
+    // A turn that failed is not an "atendimento": the card never says
+    // "nenhum atendimento" next to "1 atendimento hoje".
+    await db().update(agentTurns).set({ status: "failed" });
+    const failed = await liveShowcase("America/Sao_Paulo");
+    expect(failed?.lastTurn).toBeNull();
+    expect(failed?.today.conversations).toBe(0);
   });
 
   it("detects the overdue SLA from stored timestamps", async () => {
