@@ -162,6 +162,11 @@ export const conversations = pgTable(
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
     /** Last message the employee/analyst has seen, for unread counters. */
     analystReadSeq: integer("analyst_read_seq").notNull().default(0),
+    /** Last keystroke signal from each side, for "está escrevendo…" (short TTL). */
+    employeeTypingAt: timestamp("employee_typing_at", { withTimezone: true }),
+    analystTypingAt: timestamp("analyst_typing_at", { withTimezone: true }),
+    /** Last poll from the employee's open, visible chat: drives "online" in the console. */
+    employeeSeenAt: timestamp("employee_seen_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     version: integer("version").notNull().default(1),
     ...timestamps,
@@ -169,6 +174,10 @@ export const conversations = pgTable(
   (table) => [
     index("conversations_employee_idx").on(table.employeeId, table.lastActivityAt),
     index("conversations_state_idx").on(table.state, table.lastActivityAt),
+    // "Recently closed" in the analyst queue without scanning all closed history.
+    index("conversations_recently_closed_idx")
+      .on(table.closedAt)
+      .where(sql`${table.state} = 'closed'`),
     // At most one live conversation per employee; closed ones are history.
     uniqueIndex("conversations_one_live_per_employee")
       .on(table.employeeId)
@@ -223,6 +232,8 @@ export const agentTurns = pgTable(
   },
   (table) => [
     index("agent_turns_conversation_idx").on(table.conversationId, table.startedAt),
+    // Service-wide reads by recency: assistant health and the login metrics.
+    index("agent_turns_started_idx").on(table.startedAt),
     // One agent turn at a time per conversation.
     uniqueIndex("agent_turns_one_running")
       .on(table.conversationId)

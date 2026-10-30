@@ -8,9 +8,9 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { LogOut, MessageCircle } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { Dialog as RadixDialog, DropdownMenu } from "radix-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ConversationDetailDTO, QueueResponseDTO, TicketListItemDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -22,6 +22,40 @@ import { ConversationPanel } from "./conversation-panel";
 import { QueuePanel, type QueueFilter } from "./queue-panel";
 import { TicketsPanel } from "./tickets-panel";
 import { useFeed } from "./use-feed";
+
+const DOCK_KEY = "nexo-console-tickets-panel";
+const DOCK_EVENT = "nexo:tickets-panel";
+
+// Last choice in this page, so hiding works even where storage is blocked.
+let dockChoice: boolean | null = null;
+
+function readDock(): boolean {
+  if (dockChoice !== null) return dockChoice;
+  try {
+    return window.localStorage.getItem(DOCK_KEY) !== "hidden";
+  } catch {
+    return true; // Storage blocked: the panel stays docked.
+  }
+}
+
+function writeDock(docked: boolean): void {
+  dockChoice = docked;
+  try {
+    window.localStorage.setItem(DOCK_KEY, docked ? "docked" : "hidden");
+  } catch {
+    // Not remembered; the event below still applies it to this page.
+  }
+  window.dispatchEvent(new Event(DOCK_EVENT));
+}
+
+function subscribeDock(onChange: () => void): () => void {
+  window.addEventListener(DOCK_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(DOCK_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
 
 type Analyst = { id: string; name: string; supportLevel: string | null };
 
@@ -62,6 +96,18 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query, 300);
   const [ticketsOpen, setTicketsOpen] = useState(false);
+  const drawerSubview = useRef(false);
+  const setDrawerSubview = useCallback((open: boolean) => {
+    drawerSubview.current = open;
+  }, []);
+  // Wide screens dock the tickets panel; the analyst may hide it for more chat
+  // width. A per-browser convenience kept in local storage (never authoritative).
+  const docked = useSyncExternalStore(subscribeDock, readDock, () => true);
+  const dock = (value: boolean) => writeDock(value);
+  const showTickets = () => {
+    if (window.matchMedia("(min-width: 1536px)").matches) dock(true);
+    else setTicketsOpen(true);
+  };
 
   const queue = useQuery({
     queryKey: ["queue", filter, debouncedQuery],
@@ -122,7 +168,13 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
     void queryClient.invalidateQueries({ queryKey: ["tickets"] });
   };
 
-  const forYou = queue.data?.counts.for_you ?? 0;
+  const attention = queue.data?.attention ?? 0;
+  // The count also lives in the tab title, so it is seen from another tab.
+  useEffect(() => {
+    const base = "Console do analista · Nexo Assist";
+    document.title = attention > 0 ? `(${attention}) ${base}` : base;
+    // Re-applied on navigation too: selecting a conversation changes the URL.
+  }, [attention, selectedId]);
   const available = presence.data?.available ?? true;
 
   return (
@@ -135,13 +187,16 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
         <button
           type="button"
           onClick={() => setFilter("for_you")}
-          aria-label={`Conversas aguardando atendente: ${forYou}`}
+          aria-label={`Conversas que precisam de você: ${attention}`}
           className="bg-paper relative mt-8 flex size-12 items-center justify-center rounded-xl shadow-[0_2px_8px_rgba(27,36,49,0.1)]"
         >
           <MessageCircle className="size-6" aria-hidden="true" />
-          {forYou > 0 ? (
-            <span className="bg-cta absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white">
-              {forYou}
+          {attention > 0 ? (
+            <span
+              key={attention}
+              className="bg-cta animate-pop ring-paper absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white tabular-nums ring-2"
+            >
+              {attention > 99 ? "99+" : attention}
             </span>
           ) : null}
         </button>
@@ -188,6 +243,7 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
           data={queue.data}
           loading={queue.isLoading}
           error={queue.error ? errorMessage(queue.error) : null}
+          onRetry={() => void queue.refetch()}
           filter={filter}
           onFilter={setFilter}
           query={query}
@@ -211,7 +267,8 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
             timeZone={timeZone}
             onChanged={refreshAll}
             onBack={() => select(null)}
-            onShowTickets={() => setTicketsOpen(true)}
+            onShowTickets={showTickets}
+            ticketsDocked={docked}
           />
         ) : (
           <div className="bg-chat text-ink-3 flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
@@ -225,31 +282,41 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
 
       {selectedId && detail.data ? (
         <>
-          <div className="border-rule hidden w-[400px] shrink-0 border-l 2xl:block">
+          <div
+            className={cn(
+              "border-rule hidden w-[400px] shrink-0 border-l",
+              docked && "animate-slide-in 2xl:block",
+            )}
+          >
             <TicketsPanel
+              key={detail.data.conversation.employee.id}
               employeeName={detail.data.conversation.employee.name}
               tickets={tickets.data?.items}
               loading={tickets.isLoading}
               detail={detail.data}
               timeZone={timeZone}
+              onClose={() => dock(false)}
               onTicketUpdated={refreshAll}
             />
           </div>
-          {ticketsOpen ? (
-            <div
-              className="fixed inset-0 z-40 2xl:hidden"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Chamados do funcionário"
-            >
-              <button
-                type="button"
-                aria-label="Fechar"
-                className="bg-navy/40 animate-fade absolute inset-0"
-                onClick={() => setTicketsOpen(false)}
-              />
-              <div className="animate-fade absolute top-0 right-0 h-full w-full max-w-[420px] shadow-xl">
+          {/* Narrow screens: the same panel as a drawer, with focus trap, Esc and focus return. */}
+          <RadixDialog.Root open={ticketsOpen} onOpenChange={setTicketsOpen}>
+            <RadixDialog.Portal>
+              <RadixDialog.Overlay className="bg-navy/40 animate-fade fixed inset-0 z-40 2xl:hidden" />
+              <RadixDialog.Content
+                aria-describedby={undefined}
+                className="animate-slide-in fixed top-0 right-0 z-50 h-dvh w-full max-w-[420px] shadow-xl focus:outline-none 2xl:hidden"
+                // Inside a sub-screen, Esc means "back" (handled by the panel), not "close".
+                onEscapeKeyDown={(event) => {
+                  if (drawerSubview.current) event.preventDefault();
+                }}
+              >
+                <RadixDialog.Title className="sr-only">
+                  Chamados de {detail.data.conversation.employee.name}
+                </RadixDialog.Title>
                 <TicketsPanel
+                  key={detail.data.conversation.employee.id}
+                  onSubviewChange={setDrawerSubview}
                   employeeName={detail.data.conversation.employee.name}
                   tickets={tickets.data?.items}
                   loading={tickets.isLoading}
@@ -258,9 +325,9 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
                   onClose={() => setTicketsOpen(false)}
                   onTicketUpdated={refreshAll}
                 />
-              </div>
-            </div>
-          ) : null}
+              </RadixDialog.Content>
+            </RadixDialog.Portal>
+          </RadixDialog.Root>
         </>
       ) : null}
     </div>

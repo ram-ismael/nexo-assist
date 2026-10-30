@@ -44,14 +44,39 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  --animate-rise: rise 180ms ease-out both;
+  --animate-rise: rise 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-fade: fade 160ms ease-out both;
   --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
+  --animate-typing: typing 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  --animate-caret: caret 1s steps(1) infinite;
+  --animate-pop: pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-slide-in: slide-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-slide-back: slide-back 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 
   @keyframes rise {
     from {
       opacity: 0;
       transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes slide-in {
+    from {
+      opacity: 0.6;
+      transform: translateX(24px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes slide-back {
+    from {
+      opacity: 0.6;
+      transform: translateX(-24px);
     }
     to {
       opacity: 1;
@@ -64,6 +89,37 @@
     }
     to {
       opacity: 1;
+    }
+  }
+  @keyframes typing {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes caret {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
     }
   }
   @keyframes pulse-dot {
@@ -93,6 +149,43 @@
   :focus-visible {
     outline: 3px solid #0285f766;
     outline-offset: 2px;
+  }
+}
+
+/*
+ * Scrollbars in the app's palette: thin, rounded, transparent track, a quiet
+ * thumb that firms up on hover. WebKit/Blink use the pseudo-elements (setting
+ * the standard properties there would replace them with the plain thin bar);
+ * Firefox, which has no pseudo-elements, gets the standard properties.
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: rgb(27 36 49 / 0.14);
+  background-clip: padding-box;
+}
+:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(27 36 49 / 0.24);
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: rgb(27 36 49 / 0.38);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(27 36 49 / 0.22) transparent;
   }
 }
 

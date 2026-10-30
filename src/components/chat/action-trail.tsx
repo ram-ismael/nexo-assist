@@ -20,12 +20,15 @@ export function ActionTrail({
   turnId,
   viewer,
   name = "Nexo Assist",
+  badge,
   align = "left",
 }: {
   actions: (ActionDTO & { id?: string })[];
   turnId: string | null;
   viewer: "employee" | "analyst";
   name?: string;
+  /** Small tag after the name, e.g. "IA" in the analyst console. */
+  badge?: string;
   align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
@@ -39,6 +42,11 @@ export function ActionTrail({
         )}
       >
         <span className="text-ink font-semibold">{name}</span>
+        {badge ? (
+          <span className="bg-primary-soft text-primary-text -ml-1.5 rounded px-1.5 text-[11px] leading-[18px] font-semibold">
+            {badge}
+          </span>
+        ) : null}
         {actions.map((action, index) => (
           <span
             key={action.id ?? `${action.tool}-${index}`}

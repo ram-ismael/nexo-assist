@@ -242,7 +242,7 @@ const categoryEnum = z.enum(TICKET_CATEGORIES);
 export const listMyTickets = nexoTool({
   id: "consultar_meus_chamados",
   description:
-    "Lista os chamados do funcionário autenticado (apenas os dele), com status e prazo. Use apresentar_selecao=true quando ele precisar escolher entre vários chamados abertos.",
+    "Lista os chamados do funcionário autenticado (apenas os dele), com status e prazo. Use apresentar_selecao=true quando ele precisar escolher: com um único chamado o cartão dele é mostrado direto, e sem chamados nada é mostrado. Siga a 'orientacao' do resultado.",
   input: z.object({
     somente_abertos: z.boolean().default(true),
     apresentar_selecao: z
@@ -256,7 +256,12 @@ export const listMyTickets = nexoTool({
     const tickets = await callTicketService("listMyTickets", (service) =>
       service.listForRequester(turn.user.id, { onlyOpen: input.somente_abertos, limit: 15 }),
     );
-    if (input.apresentar_selecao && tickets.length > 0) {
+    const single = input.apresentar_selecao && tickets.length === 1 ? tickets[0] : undefined;
+    if (single) {
+      // One ticket: nothing to choose, show it straight away (one click less).
+      turn.blocks.push({ type: "ticket_card", ticket: ticketSnapshot(single, turn.now) });
+      turn.focusTicketId = single.id;
+    } else if (input.apresentar_selecao && tickets.length > 1) {
       turn.blocks.push({
         type: "ticket_selection",
         prompt: input.pergunta_da_selecao ?? "Sobre qual chamado você quer saber?",
@@ -276,6 +281,14 @@ export const listMyTickets = nexoTool({
       output: {
         total: tickets.length,
         chamados: tickets.map((ticket) => briefTicket(ticket, turn.now)),
+        orientacao:
+          tickets.length === 0
+            ? "Não há chamados. Diga isso com clareza e ofereça ajuda; não peça para escolher."
+            : single
+              ? "Só há um chamado e o cartão dele já está na tela. Responda sobre ele; não peça para escolher."
+              : input.apresentar_selecao
+                ? "A lista para escolher já está na tela. Peça para escolher, sem repetir a lista."
+                : "Use os dados para responder.",
       },
       summary: `${tickets.length} chamado(s) ${input.somente_abertos ? "aberto(s)" : "no histórico"} encontrados.`,
     };

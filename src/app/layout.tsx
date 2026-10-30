@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
 import type { ReactNode } from "react";
 import "./globals.css";
 
@@ -14,7 +15,10 @@ export const viewport: Viewport = {
   themeColor: "#1e2633",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Per-request rendering everywhere, so every page carries the CSP nonce set
+  // by the proxy (a prerendered page would ship scripts the policy blocks).
+  await connection();
   return (
     <html lang="pt-BR" className="h-full">
       <body className="bg-paper text-ink min-h-full antialiased">{children}</body>

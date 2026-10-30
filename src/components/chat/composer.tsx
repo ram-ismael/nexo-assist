@@ -4,6 +4,7 @@ import { ArrowUp, Send } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 const MAX_LENGTH = 2000;
 
@@ -36,6 +37,8 @@ export function Composer({
   onSend,
   variant = "employee",
   maxLength = MAX_LENGTH,
+  typing,
+  autoFocus,
 }: {
   draftKey: string;
   placeholder: string;
@@ -44,6 +47,10 @@ export function Composer({
   onSend: (text: string) => Promise<boolean>;
   variant?: "employee" | "console";
   maxLength?: number;
+  /** "Está escrevendo…" signal for the other person, when one is listening. */
+  typing?: { onTextChange: (text: string) => void; onBlur: () => void; onSent: () => void };
+  /** Ready to type as soon as it appears (e.g. right after assuming a conversation). */
+  autoFocus?: boolean;
 }) {
   // The draft lives only in this browser; the server render always starts empty.
   const [value, setValue] = useState(() =>
@@ -68,7 +75,9 @@ export function Composer({
     if (!text || disabled || busy || text.length > maxLength) return;
     update("");
     const accepted = await onSend(text);
-    if (!accepted) update(text);
+    // The stored message clears the typing signal on the server.
+    if (accepted) typing?.onSent();
+    else update(text);
     textarea.current?.focus();
   };
 
@@ -97,10 +106,15 @@ export function Composer({
           id={`composer-${draftKey}`}
           ref={textarea}
           rows={1}
+          autoFocus={autoFocus}
           suppressHydrationWarning
           value={value}
           disabled={disabled}
-          onChange={(event) => update(event.target.value)}
+          onChange={(event) => {
+            update(event.target.value);
+            typing?.onTextChange(event.target.value);
+          }}
+          onBlur={typing?.onBlur}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           className="text-ink placeholder:text-ink-3 max-h-[180px] min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-[15px] leading-6 outline-none disabled:cursor-not-allowed sm:text-[16px]"
@@ -120,10 +134,11 @@ export function Composer({
             type="button"
             onClick={submit}
             disabled={disabled || !value.trim() || tooLong || busy}
-            aria-label="Enviar mensagem"
-            className="bg-cta hover:bg-cta-hover flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-colors disabled:opacity-50"
+            aria-label={busy ? "Enviando mensagem" : "Enviar mensagem"}
+            aria-busy={busy || undefined}
+            className="bg-cta hover:bg-cta-hover flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-[background-color,transform,opacity] duration-150 active:scale-95 disabled:opacity-50"
           >
-            <Send className="size-5" aria-hidden="true" />
+            {busy ? <Spinner className="size-5" /> : <Send className="size-5" aria-hidden="true" />}
           </button>
         )}
       </div>

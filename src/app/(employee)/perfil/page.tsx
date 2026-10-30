@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/layout/employee-shell";
 import { CredentialsCard } from "@/components/layout/credentials-card";
-import { config } from "@/lib/config";
 import { requirePageUser } from "@/server/auth/current-user";
 import { Lock } from "lucide-react";
 
@@ -12,8 +11,6 @@ export default async function ProfilePage() {
   const rows = [
     { label: "Nome", value: user.name },
     { label: "E-mail corporativo", value: user.email, managed: true },
-    { label: "Área", value: user.department },
-    { label: "Computador", value: user.deviceOs ?? "Não informado", managed: true },
   ];
   return (
     <>
@@ -42,7 +39,7 @@ export default async function ProfilePage() {
               </div>
             ))}
           </dl>
-          <CredentialsCard email={user.email} demo={config().DEMO_AUTH_ENABLED} />
+          <CredentialsCard email={user.email} />
         </div>
       </main>
     </>

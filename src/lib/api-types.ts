@@ -1,3 +1,4 @@
+import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationState, MessageKind } from "@/domain/conversations";
 import type {
   AffectedScope,
@@ -48,20 +49,27 @@ export type MessageDTO = {
 export type ConversationDTO = {
   id: string;
   state: ConversationState;
-  agentTurnCount: number;
-  agentTurnLimit: number;
+  /** Employee messages in this session and the PRD limit (30), whoever answers. */
+  sessionMessageCount: number;
+  sessionMessageLimit: number;
   assignedAnalyst: { id: string; name: string; supportLevel: string | null } | null;
   employee: { id: string; name: string; email: string; department: string };
   lastActivityAt: string;
   closedAt: string | null;
   version: number;
   agentBusy: boolean;
+  /** Who is typing right now (signals younger than TYPING_TTL_MS). */
+  typing: { employee: boolean; analyst: boolean };
+  /** The employee has this chat open and visible right now. */
+  employeeOnline: boolean;
 };
 
 export type MessagePageDTO = {
   conversation: ConversationDTO;
   messages: MessageDTO[];
   hasMoreBefore: boolean;
+  /** Service-wide assistant health, refreshed by every poll. */
+  assistant: AssistantStatus;
 };
 
 export type DecisionDTO = {
@@ -145,6 +153,14 @@ export type QueueItemDTO = {
     createdAt: string;
   } | null;
   lowCertainty: boolean;
+  employeeTyping: boolean;
+  employeeOnline: boolean;
+  /** The agent is answering right now (a turn is running). */
+  agentBusy: boolean;
+  /** Waiting or assumed because of a critical case. */
+  critical: boolean;
+  /** Ever went to a person; a closed conversation without it was handled by the agent alone. */
+  hadHandoff: boolean;
 };
 
 export type ApiError = {
@@ -170,4 +186,6 @@ export type ConversationDetailDTO = {
 export type QueueResponseDTO = {
   items: QueueItemDTO[];
   counts: Record<"all" | "for_you" | "with_agent" | "mine", number>;
+  /** Waiting conversations plus the analyst's own with unread messages: the rail badge. */
+  attention: number;
 };

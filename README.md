@@ -2,7 +2,7 @@
 
 Agent de atendimento do service desk de TI da Nexo. O funcionário descreve o problema numa conversa e o agent consulta os chamados dele, busca na central de ajuda, abre ou atualiza chamados (sempre com confirmação) e chama um analista quando precisa. O analista recebe as conversas transferidas num console, assume o atendimento com o agent pausado e devolve ou encerra quando termina.
 
-Tudo o que aparece depois do login é estado real: mensagens, chamados, transferências e decisões do agent ficam no Postgres. Os únicos dados de exemplo são os funcionários, analistas, artigos e chamados históricos do seed.
+Tudo o que aparece depois do login é estado real: mensagens, chamados, transferências e decisões do agent ficam no Postgres. Os dados de exemplo vêm do seed: funcionários, analistas, artigos, chamados históricos e um **histórico de conversas de demonstração** (abaixo).
 
 - **Stack:** Next.js 16 (App Router) · React 19 · TypeScript estrito · Mastra · Anthropic Claude · PostgreSQL (Neon) · Drizzle · Tailwind 4 · Vitest · Playwright
 - **Deploy:** um único projeto Vercel + Neon. Veja [Deploy](#deploy) para o estado atual.
@@ -37,7 +37,9 @@ pnpm db:setup                   # migrações + seed (idempotente)
 pnpm dev                        # http://localhost:3000
 ```
 
-Contas de demonstração (qualquer senha não vazia):
+### Acesso de demonstração
+
+Este é um ambiente com **dados fictícios** e o login é de demonstração (`DEMO_AUTH_ENABLED=true`): qualquer e-mail da tabela abaixo entra com **qualquer senha não vazia**. A tela de login não exibe esse aviso de propósito, para ficar igual a um produto real; a informação fica aqui. E-mails fora do seed não entram.
 
 | Perfil      | E-mail                      | Observação                                                    |
 | ----------- | --------------------------- | ------------------------------------------------------------- |
@@ -178,7 +180,14 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 - **Postgres é a fonte da verdade** para conversas, mensagens, chamados, estado (agent ou analista), rascunhos, decisões e auditoria. Sobrevive a refresh, reinício e novo deploy. `localStorage` guarda apenas o rascunho de texto não enviado.
 - **Migrações versionadas** (`drizzle/`) e **seed idempotente** (`on conflict do nothing`): rodar de novo não duplica nem desfaz alterações reais.
 - **Agent → funcionário**: streaming NDJSON da própria resposta do turno (ações e texto em tempo real).
-- **Funcionário ↔ analista**: _polling_ curto e incremental (`?after=<seq>`, a cada 3–5 s, só com a aba visível). Não é WebSocket; escolhi isso porque funciona em funções serverless sem um serviço de tempo real extra, e a carga por consulta é um índice. A troca por push está em [trade-offs](#trade-offs-e-limitações).
+- **Funcionário ↔ analista**: _polling_ curto e incremental (`?after=<seq>`, a cada 3–5 s, só com a aba visível, e imediato quando a aba volta ou a rede reconecta). Cada mensagem trava a linha da conversa antes de receber o `seq`, então a ordem do `seq` é a ordem de commit e o cursor nunca pula uma mensagem que confirmou atrasada. Não é WebSocket; escolhi isso porque funciona em funções serverless sem um serviço de tempo real extra, e a carga por consulta é um índice. A troca por push está em [trade-offs](#trade-offs-e-limitações).
+- **Turno interrompido**: se a função morrer no meio de uma resposta, o turno fica "em andamento" no banco. Depois de 2 minutos (mais que o limite de 60 s da rota) ele é encerrado como abandonado na próxima leitura: a cota volta, o funcionário vê que a resposta foi interrompida e uma resposta tardia é descartada.
+- **"Escrevendo…" entre pessoas**: enquanto o funcionário ou o analista digita, o navegador avisa o servidor no máximo a cada 3 s; o outro lado vê os três pontinhos animados (sem texto) em até ~2 s, pelo mesmo polling. O sinal vale 6 s, some quando a mensagem é gravada (no mesmo commit) ou quando o texto é apagado, e só é aceito de quem está na conversa (o funcionário dela ou o analista que assumiu).
+- **Não lidas e presença**: cada conversa da fila mostra quantas mensagens do funcionário o analista ainda não viu; o ícone do console e o título da aba ("(3) Console…") somam as conversas aguardando atendente e as do próprio analista com não lidas. O funcionário vê "(1) Atendimento" quando chega resposta com a aba em segundo plano. "online" do funcionário (bolinha verde e "online · área") significa chat aberto e visível nos últimos 20 s, gravado a partir do próprio polling (no máximo uma escrita a cada 10 s); na fila, "digitando…" vem do mesmo sinal real de digitação.
+- **Histórico de demonstração**: `pnpm db:seed` também grava seis conversas profissionais sobre os chamados do seed (consulta com prazo vencido e transferência para N2, acesso urgente ao SAP aguardando analista, agent com segurança baixa pedindo informação, orientação pela central de ajuda, caso resolvido só pelo agent, caso assumido e encerrado por um analista). Elas seguem o mesmo caminho do produto: turno, ações, decisão ("Por quê?" funciona), cartões a partir dos chamados reais, transferência pelo mesmo caso de uso (com evento no chamado). São idempotentes e não destrutivas: quem já tem qualquer conversa não recebe nenhuma. Os turnos usam o modelo `demo-seed` e ficam fora das métricas da tela de login e da saúde do assistente. Os testes automáticos não carregam esse histórico.
+- **Fila que diz o que fazer**: a linha de cada conversa mostra o próximo passo a partir do estado gravado: "Crítico · contato em 25 min", "Transferida · contato atrasado há 10 min", "Você está atendendo · aguarda sua resposta" (o funcionário escreveu por último), "Agent respondendo…" (turno em andamento), "Encerrada por Marina", "Atendida só pelo agent". "Para você" é ordenada pelo prazo de primeiro contato mais próximo (vencidos primeiro), não por quem escreveu por último. O painel de chamados pode ser escondido em telas largas (preferência guardada no navegador).
+- **Resposta da IA em tempo real**: o texto aparece conforme o modelo gera, com cursor piscando, na mesma bolha que vira a mensagem final (sem piscar nem pular). O analista vê os pontinhos do Nexo Assist enquanto há um turno em andamento.
+- **Estados honestos**: "Assistente online / instável / indisponível" vem da configuração e de como terminaram os últimos turnos do serviço; "Enviando…" até o servidor confirmar; "processando" só quando existe turno em andamento no banco; o indicador de digitação do assistente só aparece quando a mensagem vai para o agent. Reenviar depois de uma queda reutiliza o id do cliente, então o servidor grava uma vez.
 - **Histórico infinito**: abre na página mais recente (30 mensagens) e carrega as anteriores ao rolar para cima, com cursor estável (`seq` monotônico) e âncora de rolagem para não pular. Mensagens novas não puxam a tela se você estiver lendo o passado; aparece "Nova mensagem".
 
 ## Autenticação, autorização e segurança
@@ -188,6 +197,7 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 - Autorização central (`src/server/auth/policies.ts`): funcionário só vê o que é dele; recurso de outra pessoa responde 404. Analistas acessam o que o atendimento exige.
 - Mutações exigem `Origin` do próprio site (CSRF), corpo limitado, validação Zod, mensagens limitadas a 2.000 caracteres.
 - Conteúdo de artigos e chamados é tratado como dado, não instrução; o modelo não executa SQL nem escreve no banco diretamente.
+- Content-Security-Policy com nonce por requisição (`script-src 'nonce-…' 'strict-dynamic'`, sem `object`, sem _framing_), HSTS em produção; um novo login revoga a sessão anterior do navegador; sair do console tira o analista de "online" na hora.
 - Chaves só no servidor (nunca `NEXT_PUBLIC_*`), cabeçalhos de segurança, logs estruturados sem conteúdo de mensagens.
 
 Detalhes em [docs/security.md](docs/security.md).
@@ -201,9 +211,9 @@ pnpm eval:agent        # 15 cenários do PRD contra o modelo real (precisa da ch
 pnpm verify            # formatação, lint, tipos, testes e build
 ```
 
-- **Unitários (38)**: limites do SLA (fim de semana, antes/depois do expediente, horário de fechamento, feriado, crítico 24h), prioridade, duplicidade, janela de reabertura, máquina de estados, componentes e formatação de datas.
-- **Integração (27)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, limite por minuto, retry e indisponibilidade do serviço de chamados.
-- **E2E (11)**: login e sessão, perfil, isolamento via API, CSRF, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
+- **Unitários (46)**: limites do SLA (fim de semana, antes/depois do expediente, horário de fechamento, feriado, crítico 24h), prioridade, duplicidade, janela de reabertura, máquina de estados, componentes e formatação de datas.
+- **Integração (44)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ordem de commit do `seq`, turno abandonado, contagens da fila, ferramenta negada após o analista assumir, limite de 30 mensagens por sessão (inclusive com o analista), nova conversa no limite, consulta com 0 ou 1 chamado sem pedir escolha, histórico de demonstração em ordem cronológica, falha do provedor, limite por minuto, retry e indisponibilidade do serviço de chamados.
+- **E2E (14)**: login e sessão, perfil, isolamento via API, CSRF, CSP sem violações, rotação de sessão, "escrevendo…" nos dois sentidos com dois navegadores e resposta da IA em tempo real, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
 - **Avaliação do agent**: `tests/eval/agent-eval.test.ts` cobre os 15 cenários do PRD (VPN no Windows 10 e 11, duplicado, reabertura dentro e fora dos 7 dias, reunião no mesmo dia, queda geral, pedido de monitor, status sem número, prazo vencido, pedido de analista, mensagem vaga, assunto de RH, sistema fora do ar, chamado de outra pessoa). Verifica ferramentas usadas, rascunhos e estado final, nunca o texto exato.
 
 O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como passo manual. Resultados atuais em [docs/testing.md](docs/testing.md).
@@ -214,11 +224,12 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 - Contexto limitado (16 mensagens + fatos do turno), `maxOutputTokens` 1.200, no máximo 8 passos por turno, timeout de 45 s.
 - Limites no Postgres, compartilhados entre instâncias: 8 turnos/min e 150/dia por funcionário, teto global diário configurável, 20 logins/10 min por IP. Recomenda-se também um limite de gasto no console do provedor.
 - Latência e tokens de cada turno ficam em `agent_turns`; os números da tela de login são calculados disso (e omitidos sem amostra suficiente).
-- Consultas indexadas, paginação por cursor, sem N+1 nas páginas de mensagens e na fila, pool pequeno de conexões para serverless.
+- O cartão "Agora no service desk" da tela de login também é real e anônimo (a página é pública): quando foi o último atendimento e quais passos o assistente deu, categoria/prioridade/prazo do último chamado aberto por ele e os totais do dia. Sem nomes, textos, títulos ou números de chamado; o histórico de demonstração não entra.
+- Consultas indexadas, paginação por cursor, sem N+1 nas páginas de mensagens e na fila, pool pequeno de conexões para serverless. A fila do analista foi medida com 150 mil conversas e 1,2 milhão de mensagens: contagens de 25,9 ms para 0,8 ms e lista de 29 ms para 6,6 ms ([como medir](docs/testing.md#desempenho-da-fila-do-analista)).
 
 ## Git e CI
 
-- `main`: versões estáveis. `dev`: integração. Funcionalidades em branches `feat/*` com PR para `dev`; release por PR `dev → main`.
+- Só duas branches: `dev` (integração, onde os commits entram) e `main` (estável, produção). Release por PR `dev → main`.
 - Issues por marco (#1–#7), PRs ligados a elas.
 - GitHub Actions: formatação, lint, tipos, unitários, integração (Postgres de serviço) e build; um segundo job roda o Playwright contra o build de produção.
 
@@ -231,7 +242,7 @@ Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em 
 3. `pnpm db:setup` contra o Neon (migrações são um passo explícito de release).
 4. Conectar o repositório: `main` em produção, demais branches em preview.
 
-**Estado:** ainda não publicado. Faltam credenciais que não estão disponíveis neste ambiente (login na Vercel, banco Neon e chave da Anthropic). Os passos exatos estão em [docs/deployment.md](docs/deployment.md#o-que-falta).
+**Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#estado).
 
 ## Trade-offs e limitações
 
@@ -241,7 +252,9 @@ Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em 
 - **Login de demonstração** aceita qualquer senha para e-mails do seed. Inaceitável com dados reais.
 - **Circuit breaker por instância**: protege cada função, não coordena entre instâncias.
 - **"Segurança" do agent é declarada pelo modelo**, não calibrada estatisticamente; por isso é qualitativa e acompanhada das ações que a sustentam.
-- **Presença do analista** por heartbeat de 60 s; "online" significa "console aberto e disponível nos últimos 2 minutos".
+- **Presença do analista** por heartbeat de 60 s; "online" significa "console aberto e disponível nos últimos 2 minutos" (sair zera na hora; fechar a aba leva até 2 minutos).
+- **Lido/não lido** na fila é compartilhado entre analistas (um marcador por conversa), não individual.
+- **"Escrevendo…" por polling**: aparece com até ~2 s de atraso; instantâneo exigiria um canal de push (WebSocket).
 
 ## O que eu faria com mais tempo
 

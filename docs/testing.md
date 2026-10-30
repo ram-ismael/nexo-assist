@@ -24,15 +24,27 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 | Dois analistas assumindo ao mesmo tempo                           | `conversations.test.ts`                                 |
 | Encerrar não muda chamados                                        | `conversations.test.ts`                                 |
 | Histórico com 120 mensagens, cursores sem lacuna                  | `conversations.test.ts`                                 |
+| `seq` na ordem de commit (polling nunca pula mensagem)            | `conversations.test.ts`                                 |
+| Contagens da fila: vivas + encerradas há até 7 dias               | `conversations.test.ts`                                 |
+| Turno abandonado (função morta) não trava a conversa              | `agent.test.ts`                                         |
+| Status do assistente a partir dos turnos recentes                 | `tests/unit/assistant.test.ts`                          |
 | Agent só lista os chamados do funcionário                         | `tests/integration/agent.test.ts`                       |
 | Prazo vencido calculado de timestamps                             | `agent.test.ts`                                         |
 | Agent para durante atendimento humano                             | `agent.test.ts`                                         |
 | Ferramenta negada se o analista assumir no meio                   | `agent.test.ts`                                         |
-| Limite de 30 mensagens no servidor                                | `agent.test.ts`                                         |
+| Limite de 30 mensagens por sessão, inclusive com o analista       | `agent.test.ts`, `conversations.test.ts`                |
+| 0 ou 1 chamado: sem lista para escolher                           | `agent.test.ts`                                         |
 | Provedor fora do ar sem resposta inventada                        | `agent.test.ts`                                         |
 | Jornada consulta → vencido → transferência → analista → devolução | `e2e/journey.spec.ts`                                   |
 | Chamado só depois de confirmar                                    | `e2e/journey.spec.ts`                                   |
 | CSRF, sessão, logout, perfil                                      | `e2e/auth.spec.ts`                                      |
+| CSP com nonce sem violações; novo login revoga a sessão anterior  | `e2e/auth.spec.ts`                                      |
+| "Escrevendo…" só de quem está na conversa; expira; some ao enviar | `conversations.test.ts`, `e2e/typing.spec.ts`           |
+| Resposta da IA em tempo real, sem bolha duplicada                 | `e2e/typing.spec.ts`                                    |
+| Contador de atenção (fila + minhas não lidas) e presença online   | `conversations.test.ts`                                 |
+| Fila ordenada pelo prazo de contato; crítico, agent respondendo   | `conversations.test.ts`                                 |
+| Contagem regressiva "contato em 25 min" / "atrasado há 10 min"    | `tests/unit/ui.test.tsx`                                |
+| Histórico de demonstração idempotente e fora das métricas         | `tests/integration/seed-conversations.test.ts`          |
 | Celular sem rolagem horizontal                                    | `e2e/mobile.spec.ts`                                    |
 | Decisões do agent nos cenários do PRD                             | `tests/eval/agent-eval.test.ts`                         |
 
@@ -40,11 +52,30 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 
 Execução local de 30/10/2026 (Node 26, PostgreSQL 18):
 
-- `pnpm test`: 38 unitários + 27 de integração, todos passando.
-- `pnpm test:e2e`: 11 passando com `next dev`; o job `e2e` do CI roda com `next start`.
+- `pnpm test`: 46 unitários + 44 de integração, todos passando.
+- `pnpm test:e2e`: 14 passando contra o build de produção (`CI=1`, `next start`, sem retentativas).
 - `pnpm eval:agent`: **não executado**, por falta da chave da Anthropic neste ambiente (os 15 cenários aparecem como _skipped_).
 
 No CI (GitHub Actions) os jobs `verify` e `e2e` rodam em cada PR.
+
+## Desempenho da fila do analista
+
+A fila é consultada a cada 5 s por analista. `scripts/bench/volume.sql` cria um volume sintético (2.000 funcionários, 150 mil conversas encerradas em dois anos, 400 vivas, 1,2 milhão de mensagens) num banco descartável e `scripts/bench/queue.ts` mede as consultas reais (mediana de 20 execuções):
+
+```bash
+createdb nexo_assist_bench
+DATABASE_URL=postgresql:///nexo_assist_bench pnpm tsx scripts/migrate.ts
+psql nexo_assist_bench -f scripts/bench/volume.sql
+DATABASE_URL=postgresql:///nexo_assist_bench pnpm tsx scripts/bench/queue.ts
+```
+
+| Consulta                    | Antes   | Depois |
+| --------------------------- | ------- | ------ |
+| `queueCounts`               | 25,9 ms | 0,8 ms |
+| `listQueue` (Todas)         | 29,0 ms | 6,6 ms |
+| `listQueue` (Todas + busca) | 28,6 ms | 8,0 ms |
+
+A diferença vem de trocar `state <> 'closed'` (que nenhum índice atende) por estados vivos + índice parcial em `closed_at` das encerradas.
 
 ## Modelo determinístico
 

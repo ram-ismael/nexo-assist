@@ -1,18 +1,30 @@
 "use client";
 
-import { ArrowLeft, Bot, CircleCheck, Hand, Headset, PanelRight, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  Bot,
+  CircleCheck,
+  Hand,
+  Headset,
+  PanelRight,
+  Search,
+  WifiOff,
+  X,
+} from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { STATE_LABEL } from "@/domain/conversations";
 import type { ConversationDetailDTO, MessageDTO } from "@/lib/api-types";
-import { api, errorMessage, newClientId } from "@/lib/api-client";
+import { api, ApiRequestError, errorMessage, newClientId } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { untilLabel } from "@/lib/format";
+import { contactLabel } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { Composer } from "@/components/chat/composer";
 import { MessageList } from "@/components/chat/message-list";
+import { TypingIndicator } from "@/components/chat/typing-indicator";
+import { useTypingSignal } from "@/components/chat/use-typing-signal";
 import type { useFeed } from "./use-feed";
 
 type Feed = ReturnType<typeof useFeed>;
@@ -25,6 +37,7 @@ export function ConversationPanel({
   onChanged,
   onBack,
   onShowTickets,
+  ticketsDocked,
 }: {
   feed: Feed;
   detail: ConversationDetailDTO | undefined;
@@ -33,15 +46,22 @@ export function ConversationPanel({
   onChanged: (action?: "claim" | "return" | "close") => void;
   onBack: () => void;
   onShowTickets: () => void;
+  /** The tickets panel is docked on wide screens, so the toggle is not needed there. */
+  ticketsDocked: boolean;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<"claim" | "return" | "close" | null>(null);
   const [searching, setSearching] = useState(false);
   const [term, setTerm] = useState("");
+  const [outgoing, setOutgoing] = useState<string | null>(null);
+  // A reply whose fate is unknown (network dropped) is resent with the same
+  // client id, so the server stores it once even if the first try got through.
+  const unconfirmed = useRef<{ text: string; clientId: string } | null>(null);
   const conversation = feed.conversation ?? detail?.conversation ?? null;
   const state = conversation?.state;
   const mine = state === "analyst_active" && conversation?.assignedAnalyst?.id === analystId;
   const other = state === "analyst_active" && !mine;
+  const typingSignal = useTypingSignal(conversation?.id, mine);
 
   const visibleMessages = useMemo<MessageDTO[]>(() => {
     const needle = term.trim().toLowerCase();
@@ -73,21 +93,26 @@ export function ConversationPanel({
 
   async function reply(text: string): Promise<boolean> {
     if (!conversation) return false;
+    const clientId =
+      unconfirmed.current?.text === text ? unconfirmed.current.clientId : newClientId();
+    setOutgoing(text);
     try {
       const result = await api<{ message: MessageDTO }>(
         `/api/conversations/${conversation.id}/reply`,
-        {
-          method: "POST",
-          json: { clientId: newClientId(), text },
-        },
+        { method: "POST", json: { clientId, text } },
       );
+      unconfirmed.current = null;
       feed.add(result.message);
       onChanged();
       return true;
     } catch (error) {
+      unconfirmed.current =
+        error instanceof ApiRequestError && error.status === 0 ? { text, clientId } : null;
       toast("error", errorMessage(error));
       await feed.sync();
       return false;
+    } finally {
+      setOutgoing(null);
     }
   }
 
@@ -136,10 +161,16 @@ export function ConversationPanel({
         >
           <ArrowLeft className="size-5" />
         </button>
-        <Avatar name={conversation.employee.name} />
+        <Avatar
+          name={conversation.employee.name}
+          online={conversation.employeeOnline || undefined}
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[17px] font-medium">{conversation.employee.name}</p>
           <p className="text-ink-3 truncate text-[14px]">
+            {conversation.employeeOnline ? (
+              <span className="text-success-text">online · </span>
+            ) : null}
             {conversation.employee.department}
             {detail?.focusTicketNumber ? ` · ${detail.focusTicketNumber}` : ""}
           </p>
@@ -187,11 +218,21 @@ export function ConversationPanel({
           type="button"
           onClick={onShowTickets}
           aria-label="Chamados do funcionário"
-          className="text-ink-2 hover:bg-desk rounded-full p-2 2xl:hidden"
+          className={cn("text-ink-2 hover:bg-desk rounded-full p-2", ticketsDocked && "2xl:hidden")}
         >
           <PanelRight className="size-5" />
         </button>
       </header>
+      {!feed.connected ? (
+        <p
+          role="status"
+          className="bg-warning-soft text-warning-text flex items-center gap-2 px-4 py-2 text-[13px] sm:px-6"
+        >
+          <WifiOff className="size-4 shrink-0" aria-hidden="true" />
+          Sem conexão com o servidor. Tentando reconectar; novas mensagens aparecem assim que
+          voltar.
+        </p>
+      ) : null}
       {searching ? (
         <div className="border-rule bg-paper flex items-center gap-2 border-b px-4 py-2 sm:px-6">
           <Search className="text-ink-3 size-4" aria-hidden="true" />
@@ -228,6 +269,14 @@ export function ConversationPanel({
         olderError={feed.olderError}
         onLoadOlder={feed.loadOlder}
         handlersFor={() => ({ onChanged: () => undefined })}
+        outgoing={outgoing}
+        typing={
+          term ? null : conversation.typing.employee ? (
+            <TypingIndicator name={firstName ?? "Funcionário"} align="left" tone="paper" />
+          ) : state === "agent_active" && conversation.agentBusy ? (
+            <TypingIndicator name="Nexo Assist" align="right" tone="agent" />
+          ) : null
+        }
         empty={
           <p className="text-ink-3 py-10 text-center text-[14px]">
             {term ? "Nenhuma mensagem encontrada." : "Sem mensagens ainda."}
@@ -261,6 +310,9 @@ export function ConversationPanel({
               placeholder={`Responder para ${firstName}…`}
               variant="console"
               maxLength={4000}
+              busy={outgoing !== null}
+              typing={typingSignal}
+              autoFocus
               onSend={reply}
             />
           </>
@@ -279,7 +331,7 @@ export function ConversationPanel({
                   </p>
                   <p className="text-ink-3 text-[14px]">
                     {state === "waiting_analyst"
-                      ? `Agent pausado${handoff?.respondBy ? ` · até ${untilLabel(handoff.respondBy, timeZone)}` : ""}`
+                      ? `Agent pausado${handoff?.respondBy ? ` · ${contactLabel(handoff.respondBy, timeZone)}` : ""}`
                       : "Assuma se precisar intervir; o agent é pausado na hora."}
                   </p>
                 </div>

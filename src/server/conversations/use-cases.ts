@@ -1,8 +1,8 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { config } from "@/lib/config";
 import type { SessionUser } from "@/server/auth/sessions";
 import { db } from "@/server/db/client";
-import { auditEvents, handoffs } from "@/server/db/schema";
+import { auditEvents, conversations, handoffs } from "@/server/db/schema";
 import { AppError, conflict, notFound } from "@/server/errors";
 import { callTicketService } from "@/server/tickets/gateway";
 import { confirmDraft, confirmationText } from "@/server/tickets/drafts";
@@ -10,8 +10,13 @@ import { ticketSnapshot, type TicketRow } from "@/server/tickets/service";
 import { performHandoff } from "./handoff";
 import {
   appendMessage,
+  countEmployeeMessages,
+  findLiveConversation,
   findMessageByClientId,
+  getOrCreateLiveConversation,
+  hasAbandonedTurn,
   lockConversation,
+  reapAbandonedTurns,
   transitionConversation,
   type ConversationRow,
   type MessageRow,
@@ -127,24 +132,16 @@ export async function employeeRequestsAnalyst(user: SessionUser, conversationId:
 }
 
 /**
- * Employee message while a person owns the conversation: stored for the
- * analyst, no agent involved. Idempotent on the client message id.
+ * Read paths call this so a turn killed with its function stops showing as
+ * "processing" and the employee learns the answer was interrupted. The cheap
+ * indexed check runs first; the locking transaction only when there is work.
  */
-export async function postEmployeeMessageToHuman(
-  user: SessionUser,
-  conversation: ConversationRow,
-  input: { clientId: string; text: string },
-): Promise<MessageRow> {
+export async function recoverAbandonedTurns(conversationId: string): Promise<boolean> {
+  if (!(await hasAbandonedTurn(db(), conversationId))) return false;
   return db().transaction(async (tx) => {
-    const existing = await findMessageByClientId(tx, conversation.id, input.clientId);
-    if (existing) return existing;
-    return appendMessage(tx, {
-      conversationId: conversation.id,
-      kind: "employee",
-      senderId: user.id,
-      content: input.text,
-      clientId: input.clientId,
-    });
+    const conversation = await lockConversation(tx, conversationId);
+    if (!conversation) return false;
+    return (await reapAbandonedTurns(tx, conversationId)) > 0;
   });
 }
 
@@ -275,4 +272,107 @@ export async function latestHandoff(conversationId: string) {
     .orderBy(desc(handoffs.createdAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * "Está escrevendo…" between people. Ownership and state are part of the
+ * update itself: only the conversation's employee while a person handles it,
+ * or the analyst who assumed it, can signal. Returns false when not allowed.
+ */
+export async function signalTyping(
+  user: SessionUser,
+  conversationId: string,
+  typing: boolean,
+): Promise<boolean> {
+  const at = typing ? new Date() : null;
+  const rows =
+    user.role === "employee"
+      ? await db()
+          .update(conversations)
+          .set({ employeeTypingAt: at })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.employeeId, user.id),
+              inArray(conversations.state, ["waiting_analyst", "analyst_active"]),
+            ),
+          )
+          .returning({ id: conversations.id })
+      : await db()
+          .update(conversations)
+          .set({ analystTypingAt: at })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.assignedAnalystId, user.id),
+              eq(conversations.state, "analyst_active"),
+            ),
+          )
+          .returning({ id: conversations.id });
+  return rows.length > 0;
+}
+
+/**
+ * The employee's chat is open and visible (it is polling): record it for the
+ * console's "online". Written at most every 10 s per conversation, so polling
+ * does not turn into a write per request.
+ */
+export async function touchEmployeePresence(employeeId: string, conversationId: string) {
+  await db()
+    .update(conversations)
+    .set({ employeeSeenAt: new Date() })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        eq(conversations.employeeId, employeeId),
+        or(
+          isNull(conversations.employeeSeenAt),
+          lt(conversations.employeeSeenAt, sql`now() - interval '10 seconds'`),
+        ),
+      ),
+    );
+}
+
+/**
+ * "Nova conversa". Allowed when the current one is closed, still empty, or has
+ * used up its message limit (PRD: 30 per session). While a person is handling
+ * the employee and messages are left, the current one must go on. A session
+ * that hit the limit with an analyst is closed for the analyst too, with a
+ * system line saying why, so nobody is left waiting on it.
+ */
+export async function startNewConversation(employeeId: string, limit: number) {
+  return db().transaction(async (tx) => {
+    const live = await findLiveConversation(tx, employeeId);
+    if (live) {
+      const locked = await lockConversation(tx, live.id);
+      if (!locked) throw conflict("Tente novamente.");
+      const sent = await countEmployeeMessages(tx, locked.id);
+      const exhausted = sent >= limit;
+      if (locked.state !== "agent_active" && !exhausted) {
+        throw conflict(
+          "Você está sendo atendido por um analista nesta conversa. Continue por ela.",
+        );
+      }
+      if (sent === 0 && locked.state === "agent_active") return locked;
+      const now = new Date();
+      await transitionConversation(tx, locked, "closed", {}, now);
+      await tx
+        .update(handoffs)
+        .set({ resolvedAt: now })
+        .where(and(eq(handoffs.conversationId, locked.id), isNull(handoffs.resolvedAt)));
+      await appendMessage(
+        tx,
+        {
+          conversationId: locked.id,
+          kind: "system",
+          senderId: null,
+          content: exhausted
+            ? `Sessão encerrada: limite de ${limit} mensagens atingido. O funcionário começou uma nova conversa`
+            : "Sessão encerrada pelo funcionário para começar uma nova conversa",
+        },
+        now,
+      );
+    }
+    return getOrCreateLiveConversation(tx, employeeId);
+  });
 }

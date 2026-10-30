@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, newClientId, parseError } from "@/lib/api-client";
 
@@ -14,6 +15,8 @@ export type LiveAction = {
 export type PendingTurn = {
   clientId: string;
   text: string;
+  /** Only an agent-owned conversation gets an assistant answer to wait for. */
+  toAgent: boolean;
   accepted: boolean;
   actions: LiveAction[];
   reply: string;
@@ -36,6 +39,15 @@ type StreamEvent =
     };
 
 const POLL_MS = 3500;
+// With a person on the other side, poll faster so replies and "está
+// escrevendo…" show up within ~2 s.
+const HUMAN_POLL_MS = 2000;
+
+function pollInterval(conversation: ConversationDTO | null): number {
+  return conversation?.state === "waiting_analyst" || conversation?.state === "analyst_active"
+    ? HUMAN_POLL_MS
+    : POLL_MS;
+}
 
 /** Merge by seq and drop duplicates: polling, streaming and paging can overlap. */
 export function mergeMessages(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] {
@@ -45,7 +57,7 @@ export function mergeMessages(current: MessageDTO[], incoming: MessageDTO[]): Me
   return [...bySeq.values()].sort((left, right) => left.seq - right.seq);
 }
 
-export function useChat(initial: MessagePageDTO | null) {
+export function useChat(initial: MessagePageDTO | null, initialAssistant: AssistantStatus) {
   const [conversation, setConversation] = useState<ConversationDTO | null>(
     initial?.conversation ?? null,
   );
@@ -56,7 +68,14 @@ export function useChat(initial: MessagePageDTO | null) {
   const [pending, setPending] = useState<PendingTurn | null>(null);
   const [failure, setFailure] = useState<TurnFailure | null>(null);
   const [syncError, setSyncError] = useState(false);
+  const [assistant, setAssistant] = useState<AssistantStatus>(initialAssistant);
   const streaming = useRef(false);
+  // A message whose fate is unknown (network dropped before any answer) is
+  // resent with the same client id, so the server stores and answers it once.
+  const unconfirmed = useRef<{ text: string; clientId: string } | null>(null);
+  // Turns this tab watched stream in: their final message replaces the live
+  // bubble in place instead of animating in a second time.
+  const streamedTurns = useRef(new Set<string>());
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const conversationRef = useRef(conversation);
@@ -73,6 +92,7 @@ export function useChat(initial: MessagePageDTO | null) {
       );
       setConversation(page.conversation);
       setMessages((list) => mergeMessages(list, page.messages));
+      setAssistant(page.assistant);
       setSyncError(false);
     } catch (error) {
       if (error instanceof ApiRequestError && error.code === "offline") setSyncError(true);
@@ -86,16 +106,19 @@ export function useChat(initial: MessagePageDTO | null) {
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       if (document.visibilityState === "visible") await sync();
-      timer = setTimeout(tick, POLL_MS);
+      timer = setTimeout(tick, pollInterval(conversationRef.current));
     };
-    timer = setTimeout(tick, POLL_MS);
+    timer = setTimeout(tick, pollInterval(conversationRef.current));
     const onVisible = () => {
       if (document.visibilityState === "visible") void sync();
     };
+    const onOnline = () => void sync();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
   }, [conversation?.id, sync]);
 
@@ -148,6 +171,7 @@ export function useChat(initial: MessagePageDTO | null) {
         setPending((value) => (value ? { ...value, reply: value.reply + event.delta } : value));
         break;
       case "done":
+        if (event.message?.turnId) streamedTurns.current.add(event.message.turnId);
         setConversation(event.conversation);
         if (event.message)
           setMessages((list) => mergeMessages(list, [event.message as MessageDTO]));
@@ -171,12 +195,17 @@ export function useChat(initial: MessagePageDTO | null) {
   const send = useCallback(
     async (text: string, options: { retryOfMessageId?: string } = {}): Promise<boolean> => {
       if (streaming.current) return false;
-      const clientId = newClientId();
+      const clientId =
+        !options.retryOfMessageId && unconfirmed.current?.text === text
+          ? unconfirmed.current.clientId
+          : newClientId();
+      unconfirmed.current = null;
       streaming.current = true;
       setFailure(null);
       setPending({
         clientId,
         text: options.retryOfMessageId ? "" : text,
+        toAgent: (conversationRef.current?.state ?? "agent_active") === "agent_active",
         accepted: false,
         actions: [],
         reply: "",
@@ -255,6 +284,9 @@ export function useChat(initial: MessagePageDTO | null) {
         return true;
       } catch (error) {
         setPending(null);
+        if (error instanceof ApiRequestError && error.code === "offline" && text) {
+          unconfirmed.current = { text, clientId };
+        }
         const message =
           error instanceof ApiRequestError
             ? error.message
@@ -272,11 +304,18 @@ export function useChat(initial: MessagePageDTO | null) {
     setConversation(page?.conversation ?? next ?? null);
     setMessages(page?.messages ?? []);
     setHasMoreBefore(page?.hasMoreBefore ?? false);
+    if (page) setAssistant(page.assistant);
     setFailure(null);
   }, []);
 
+  const streamedInPlace = useCallback(
+    (message: MessageDTO) => !!message.turnId && streamedTurns.current.has(message.turnId),
+    [],
+  );
+
   return {
     conversation,
+    streamedInPlace,
     setConversation,
     messages,
     hasMoreBefore,
@@ -287,6 +326,7 @@ export function useChat(initial: MessagePageDTO | null) {
     failure,
     setFailure,
     syncError,
+    assistant,
     send,
     sync,
     replaceConversation,

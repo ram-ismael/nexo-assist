@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "employee_seen_at" timestamp with time zone;

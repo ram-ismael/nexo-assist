@@ -25,13 +25,15 @@ export function Avatar({
 }: {
   name: string;
   size?: "sm" | "md" | "lg";
+  /** true: green dot; false: grey dot (e.g. "ausente"); undefined: no dot (no presence data). */
   online?: boolean;
   className?: string;
 }) {
   const dimension =
     size === "sm" ? "size-8 text-xs" : size === "lg" ? "size-12 text-base" : "size-10 text-sm";
   return (
-    <span className={cn("relative inline-flex shrink-0", className)}>
+    // h-fit: in a stretching flex row the presence dot stays on the avatar.
+    <span className={cn("relative inline-flex h-fit shrink-0", className)}>
       <span
         aria-hidden="true"
         className={cn(
@@ -45,7 +47,8 @@ export function Avatar({
       {online !== undefined ? (
         <span
           className={cn(
-            "border-paper absolute right-0 bottom-0 size-3 rounded-full border-2",
+            "border-paper absolute right-0 bottom-0 rounded-full border-2",
+            size === "lg" ? "size-3.5" : "size-3",
             online ? "bg-success" : "bg-ink-4",
           )}
           aria-label={online ? "online" : "offline"}

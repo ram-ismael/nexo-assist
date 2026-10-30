@@ -17,10 +17,12 @@ import { consume } from "@/server/rate-limit";
 import {
   appendMessage,
   findConversation,
+  countEmployeeMessages,
   findMessageByClientId,
   getOrCreateLiveConversation,
   loadSenders,
   lockConversation,
+  reapAbandonedTurns,
   type ConversationRow,
   type MessageRow,
 } from "@/server/conversations/repository";
@@ -120,6 +122,14 @@ export async function submitEmployeeMessage(
     } else {
       const existing = await findMessageByClientId(tx, conversation.id, input.clientId);
       if (existing) return { mode: "duplicate" as const, message: existing, conversation };
+      // PRD: 30 messages per session, whoever answers (assistant or analyst).
+      // A retry reuses the stored message, so it never counts twice.
+      if ((await countEmployeeMessages(tx, conversation.id)) >= env.AGENT_SESSION_MESSAGE_LIMIT) {
+        throw new AppError(
+          "limit_reached",
+          `Esta sessão chegou ao limite de ${env.AGENT_SESSION_MESSAGE_LIMIT} mensagens. Comece uma nova conversa para continuar.`,
+        );
+      }
     }
 
     if (conversation.state !== "agent_active") {
@@ -135,11 +145,9 @@ export async function submitEmployeeMessage(
       return { mode: "human" as const, message: userMessage, conversation };
     }
 
-    if (conversation.agentTurnCount >= env.AGENT_SESSION_MESSAGE_LIMIT) {
-      throw new AppError(
-        "limit_reached",
-        `Esta sessão chegou ao limite de ${env.AGENT_SESSION_MESSAGE_LIMIT} mensagens com o assistente. Comece uma nova conversa ou fale com um analista.`,
-      );
+    // A turn whose function was killed would otherwise block this conversation forever.
+    if (await reapAbandonedTurns(tx, conversation.id)) {
+      conversation = (await lockConversation(tx, conversation.id)) ?? conversation;
     }
     const running = await tx
       .select({ id: agentTurns.id })
@@ -344,8 +352,16 @@ async function finishTurn(
   const outcome = await db().transaction(async (tx) => {
     const conversation = await lockConversation(tx, accepted.conversation.id);
     if (!conversation) throw notFound("Conversa");
-    // A person took over while the model was working: the answer is not delivered.
-    const discarded = conversation.state === "analyst_active" || conversation.state === "closed";
+    const [turnRow] = await tx
+      .select({ status: agentTurns.status })
+      .from(agentTurns)
+      .where(eq(agentTurns.id, accepted.turnId));
+    // A person took over while the model was working, or the turn was already
+    // closed as abandoned: the answer is not delivered.
+    const discarded =
+      conversation.state === "analyst_active" ||
+      conversation.state === "closed" ||
+      turnRow?.status !== "running";
     const actions = await tx
       .select({ tool: agentActions.tool, label: agentActions.label, status: agentActions.status })
       .from(agentActions)
@@ -397,7 +413,8 @@ async function finishTurn(
     await tx
       .update(agentTurns)
       .set({
-        status: discarded ? "discarded" : "completed",
+        status:
+          turnRow?.status !== "running" ? turnRow?.status : discarded ? "discarded" : "completed",
         model: metrics.model,
         latencyMs: metrics.latencyMs,
         firstTokenMs: metrics.firstTokenMs,

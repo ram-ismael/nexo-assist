@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mergeMessages } from "@/components/chat/use-chat";
 import { TicketCard } from "@/components/tickets/ticket-card";
 import type { MessageDTO, TicketSnapshot } from "@/lib/api-types";
-import { formatListTime, untilLabel } from "@/lib/format";
+import { contactLabel, durationLabel, formatListTime, untilLabel } from "@/lib/format";
 
 afterEach(cleanup);
 
@@ -67,5 +67,33 @@ describe("date formatting in the service-desk time zone", () => {
     const now = new Date("2026-10-30T13:00:00.000Z");
     expect(untilLabel("2026-10-30T15:43:00.000Z", "America/Sao_Paulo", now)).toBe("12:43");
     expect(formatListTime("2026-10-29T13:00:00.000Z", "America/Sao_Paulo", now)).toBe("ontem");
+  });
+});
+
+describe("contactLabel", () => {
+  const now = new Date("2026-10-30T13:00:00.000Z"); // 10:00 in São Paulo
+  const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISOString();
+  const tz = "America/Sao_Paulo";
+
+  it("counts down to the first-contact deadline", () => {
+    expect(contactLabel(at(0.2), tz, now)).toBe("contato agora");
+    expect(contactLabel(at(25), tz, now)).toBe("contato em 25 min");
+    expect(contactLabel(at(170), tz, now)).toBe("contato em 3 h");
+    expect(contactLabel(at(26 * 60), tz, now)).toBe("contato até amanhã, 12:00");
+  });
+
+  it("says how late the contact is once the deadline passed", () => {
+    expect(contactLabel(at(-10), tz, now)).toBe("contato atrasado há 10 min");
+    expect(contactLabel(at(-130), tz, now)).toBe("contato atrasado há 2 h");
+    expect(contactLabel(at(-3 * 24 * 60), tz, now)).toBe("contato atrasado há 3 dias");
+  });
+});
+
+describe("durationLabel", () => {
+  it("rounds to the unit a person would say", () => {
+    expect(durationLabel(25 * 60_000)).toBe("25 min");
+    expect(durationLabel(4 * 3_600_000)).toBe("4 h");
+    expect(durationLabel(26 * 3_600_000)).toBe("1 dia");
+    expect(durationLabel(6 * 86_400_000)).toBe("6 dias");
   });
 });

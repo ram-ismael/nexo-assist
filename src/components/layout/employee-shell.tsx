@@ -41,8 +41,8 @@ function SidebarContent({ user, onNavigate }: { user: ShellUser; onNavigate?: ()
   const { logout, pending } = useLogout();
   return (
     <div className="flex h-full flex-col px-4 py-5">
-      <Link href="/atendimento" onClick={onNavigate} className="px-1.5">
-        <Logo className="h-6" />
+      <Link href="/atendimento" onClick={onNavigate} className="self-start px-3">
+        <Logo className="h-5" />
       </Link>
       <nav aria-label="Principal" className="mt-8 flex flex-col gap-1">
         {NAV.map((item) => {
@@ -79,7 +79,7 @@ function SidebarContent({ user, onNavigate }: { user: ShellUser; onNavigate?: ()
           type="button"
           onClick={logout}
           disabled={pending}
-          className="text-ink-2 hover:bg-desk mt-3 flex h-10 w-full items-center gap-3 rounded-lg px-2 text-[15px] transition-colors disabled:opacity-60"
+          className="text-ink-2 hover:bg-danger-soft hover:text-danger-text focus-visible:bg-danger-soft mt-3 flex h-11 w-full items-center gap-3 rounded-lg px-3 text-[15px] transition-colors disabled:opacity-60"
         >
           <LogOut className="size-[18px]" aria-hidden="true" />
           {pending ? "Saindo…" : "Sair"}
@@ -94,7 +94,7 @@ export function EmployeeShell({ user, children }: { user: ShellUser; children: R
   return (
     <ToastProvider>
       <div className="bg-paper flex h-dvh overflow-hidden">
-        <aside className="border-rule hidden w-[232px] shrink-0 border-r lg:block">
+        <aside className="border-rule hidden w-[280px] shrink-0 border-r lg:block">
           <SidebarContent user={user} />
         </aside>
         {open ? (
@@ -110,7 +110,7 @@ export function EmployeeShell({ user, children }: { user: ShellUser; children: R
               className="animate-fade bg-navy/40 absolute inset-0"
               onClick={() => setOpen(false)}
             />
-            <aside className="animate-rise bg-paper relative h-full w-[272px] shadow-xl">
+            <aside className="animate-rise bg-paper relative h-full w-[min(280px,85vw)] shadow-xl">
               <button
                 type="button"
                 onClick={() => setOpen(false)}

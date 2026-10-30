@@ -66,7 +66,7 @@ Palavras-chave normalizadas (sem acento, sem palavras vazias, radical curto) de 
 
 - Uma conversa viva por funcionário; "Nova conversa" encerra a atual se estiver com o agent.
 - Encerrar a conversa não altera chamados.
-- Limite da sessão: 30 mensagens do funcionário respondidas pelo agent (inclui respostas rápidas; não inclui mensagens trocadas com o analista nem turnos que falharam).
+- Limite da sessão (PRD): 30 mensagens do funcionário por sessão, quem quer que responda (assistente ou analista); respostas rápidas contam. Uma nova tentativa da mesma mensagem não conta duas vezes. O contador "N/30 mensagens nesta sessão" fica sempre visível e é lido das mensagens gravadas. No limite, o campo de envio fecha e "Nova conversa" fica disponível; se um analista estiver atendendo, a nova conversa encerra a anterior com uma linha de sistema explicando o motivo.
 
 ## Transferência
 

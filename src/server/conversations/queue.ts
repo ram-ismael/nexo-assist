@@ -1,8 +1,9 @@
-import { and, desc, eq, gt, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { QueueItemDTO } from "@/lib/api-types";
 import type { Executor } from "@/server/db/client";
 import {
   agentDecisions,
+  agentTurns,
   conversations,
   handoffs,
   messages,
@@ -10,11 +11,26 @@ import {
   users,
 } from "@/server/db/schema";
 import { HANDOFF_REASON_LABEL } from "./handoff";
+import { ABANDONED_TURN_MS } from "./repository";
+import { employeeOnline, employeeTyping } from "./serialize";
 
 export const QUEUE_FILTERS = ["all", "for_you", "with_agent", "mine"] as const;
 export type QueueFilter = (typeof QUEUE_FILTERS)[number];
 
 const RECENTLY_CLOSED_DAYS = 7;
+const OPEN_STATES = ["agent_active", "waiting_analyst", "analyst_active"] as const;
+
+// Written as two indexable branches (open states, recent closed_at) instead of
+// `state <> 'closed'`, which no index serves and grows with the whole history.
+function liveOrRecentlyClosed(): SQL | undefined {
+  return or(
+    inArray(conversations.state, [...OPEN_STATES]),
+    and(
+      eq(conversations.state, "closed"),
+      gt(conversations.closedAt, sql`now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})`),
+    ),
+  );
+}
 
 function filterCondition(filter: QueueFilter, analystId: string): SQL | undefined {
   switch (filter) {
@@ -28,10 +44,7 @@ function filterCondition(filter: QueueFilter, analystId: string): SQL | undefine
         eq(conversations.assignedAnalystId, analystId),
       );
     case "all":
-      return or(
-        ne(conversations.state, "closed"),
-        gt(conversations.closedAt, sql`now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})`),
-      );
+      return liveOrRecentlyClosed();
   }
 }
 
@@ -65,6 +78,13 @@ export async function listQueue(
     .where(and(...conditions))
     .orderBy(
       sql`case ${conversations.state} when 'waiting_analyst' then 0 when 'analyst_active' then 1 when 'agent_active' then 2 else 3 end`,
+      // Waiting conversations by urgency: the nearest (or most overdue)
+      // first-contact deadline first, not by who wrote last.
+      sql`case when ${conversations.state} = 'waiting_analyst' then (
+        select h.respond_by from ${handoffs} h
+        where h.conversation_id = ${conversations.id}
+        order by h.created_at desc limit 1
+      ) end asc nulls last`,
       desc(conversations.lastActivityAt),
     )
     .limit(options.limit ?? 50);
@@ -76,7 +96,7 @@ export async function listQueue(
       rows.map((row) => row.conversation.assignedAnalystId).filter((id): id is string => !!id),
     ),
   ];
-  const [unreadRows, handoffRows, analystRows, lowRows] = await Promise.all([
+  const [unreadRows, handoffRows, analystRows, lowRows, busyRows] = await Promise.all([
     executor
       .select({ conversationId: messages.conversationId, count: sql<number>`count(*)::int` })
       .from(messages)
@@ -114,7 +134,18 @@ export async function listQueue(
       .from(agentDecisions)
       .where(inArray(agentDecisions.conversationId, ids))
       .orderBy(agentDecisions.conversationId, desc(agentDecisions.createdAt)),
+    executor
+      .select({ conversationId: agentTurns.conversationId })
+      .from(agentTurns)
+      .where(
+        and(
+          inArray(agentTurns.conversationId, ids),
+          eq(agentTurns.status, "running"),
+          gt(agentTurns.startedAt, new Date(Date.now() - ABANDONED_TURN_MS)),
+        ),
+      ),
   ]);
+  const busy = new Set(busyRows.map((row) => row.conversationId));
   const ticketIds = [...new Set(handoffRows.flatMap((row) => row.ticketIds))];
   const ticketRows =
     ticketIds.length > 0
@@ -160,6 +191,11 @@ export async function listQueue(
           : null,
       lowCertainty:
         conversation.state === "agent_active" && certainty.get(conversation.id) === "baixa",
+      employeeTyping: employeeTyping(conversation),
+      agentBusy: conversation.state === "agent_active" && busy.has(conversation.id),
+      critical: !!handoff && showHandoff && handoff.reason === "critical",
+      hadHandoff: !!handoff,
+      employeeOnline: employeeOnline(conversation.employeeSeenAt),
     };
   });
 }
@@ -167,26 +203,40 @@ export async function listQueue(
 export async function queueCounts(
   executor: Executor,
   analystId: string,
-): Promise<Record<QueueFilter, number>> {
+): Promise<Record<QueueFilter, number> & { attention: number }> {
   const result = await executor.execute<{
     for_you: number;
     with_agent: number;
     mine: number;
-    all: number;
+    open: number;
+    recently_closed: number;
+    mine_unread: number;
   }>(sql`
     select
       count(*) filter (where state = 'waiting_analyst')::int as for_you,
       count(*) filter (where state = 'agent_active')::int as with_agent,
       count(*) filter (where state = 'analyst_active' and assigned_analyst_id = ${analystId})::int as mine,
-      count(*) filter (where state <> 'closed' or closed_at > now() - make_interval(days => ${RECENTLY_CLOSED_DAYS}))::int as all
+      count(*)::int as open,
+      (select count(*)::int from conversations
+        where state = 'closed' and closed_at > now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})) as recently_closed,
+      count(*) filter (
+        where state = 'analyst_active' and assigned_analyst_id = ${analystId}
+          and exists (
+            select 1 from messages m
+            where m.conversation_id = conversations.id and m.kind = 'employee'
+              and m.seq > conversations.analyst_read_seq
+          )
+      )::int as mine_unread
     from conversations
+    where state in ('agent_active', 'waiting_analyst', 'analyst_active')
   `);
   const row = result.rows[0];
   return {
     for_you: Number(row?.for_you ?? 0),
     with_agent: Number(row?.with_agent ?? 0),
     mine: Number(row?.mine ?? 0),
-    all: Number(row?.all ?? 0),
+    all: Number(row?.open ?? 0) + Number(row?.recently_closed ?? 0),
+    attention: Number(row?.for_you ?? 0) + Number(row?.mine_unread ?? 0),
   };
 }
 

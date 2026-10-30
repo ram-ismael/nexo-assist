@@ -138,8 +138,15 @@ function planFor(text: string): Step[] {
       },
       {
         kind: "text",
-        text: (results) =>
-          `Você tem ${String(results[0]?.total ?? 0)} chamados abertos. Sobre qual deles quer saber?`,
+        // Mirrors what the tool showed: nothing to pick, one card, or a list.
+        text: (results) => {
+          const total = Number(results[0]?.total ?? 0);
+          if (total === 0) {
+            return "Você não tem chamados abertos no momento. Quer abrir um ou tirar alguma dúvida?";
+          }
+          if (total === 1) return "Você tem um chamado aberto; os detalhes estão no cartão abaixo.";
+          return `Você tem ${total} chamados abertos. Sobre qual deles quer saber?`;
+        },
       },
     ];
   }
@@ -240,9 +247,12 @@ export function createScriptedModel(): LanguageModelV4 {
     if (!step || step.kind === "text") {
       const content = step ? step.text(toolResults(options.prompt, index + 1)) : "";
       const id = `text-${(counter += 1)}`;
+      // Word-sized deltas like a real provider, so the streaming path (and the
+      // live bubble in the UI) is exercised the same way. No delays are added.
+      const deltas = content.match(/\S+\s*|\s+/g) ?? [];
       parts.push(
         { type: "text-start", id },
-        { type: "text-delta", id, delta: content },
+        ...deltas.map((delta) => ({ type: "text-delta" as const, id, delta })),
         { type: "text-end", id },
       );
       parts.push({ type: "finish", usage, finishReason: { unified: "stop", raw: "stop" } });

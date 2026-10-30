@@ -37,7 +37,7 @@ DATABASE_URL="<string direta do Neon>" pnpm db:migrate
 DATABASE_URL="<string direta do Neon>" pnpm db:seed   # idempotente; só insere o que falta
 ```
 
-As migrações deste projeto são aditivas. Uma migração destrutiva precisaria de revisão manual e backup (branch do Neon) antes.
+`pnpm db:seed` também grava o histórico de conversas de demonstração (só para quem ainda não tem conversa; nunca altera uso real). As migrações deste projeto são aditivas. Uma migração destrutiva precisaria de revisão manual e backup (branch do Neon) antes.
 
 ## Deploy da aplicação
 
@@ -52,12 +52,11 @@ curl -s https://<url>/api/health          # {"status":"ok","database":"ok","llm"
 
 Depois, no navegador: login como `ana.souza@nexo.com.br` → perguntar o status dos chamados → abrir chamado de VPN e confirmar → pedir analista; em outra janela, `rafael.lima@nexo.com.br` → assumir → responder → devolver. Conferir que nenhum segredo aparece no bundle (`grep -r sk-ant .next/static` deve vir vazio).
 
-## O que falta
+## Estado
 
-Na data desta entrega o deploy **não foi feito**. Neste ambiente não havia:
+Produção em https://nexo-assist-two.vercel.app (projeto Vercel `nexo-assist`, banco Neon em `sa-east-1`), publicada a partir de `main`. `GET /api/health` informa `assistant`: `online`, `degraded` (três falhas seguidas do provedor nos últimos 15 min) ou `unavailable` (sem chave ou credencial recusada).
 
-- sessão da Vercel CLI (`vercel whoami` → _Logged out_);
-- projeto Neon ou string de conexão;
-- `ANTHROPIC_API_KEY`.
+## Rollback
 
-Com esses três itens, os passos acima levam poucos minutos. O código, as migrações, o seed e os testes já estão prontos para isso.
+- Aplicação: no painel da Vercel, _Promote_ o deploy anterior (ou `vercel rollback`).
+- Banco: as migrações são aditivas (só índices novos desde a `0000`), então um deploy anterior roda sobre o schema novo sem mudança. Antes de uma migração destrutiva, criar um branch do Neon como ponto de restauração.
