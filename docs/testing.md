@@ -52,7 +52,7 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 
 Execução local de 30/10/2026 (Node 26, PostgreSQL 18):
 
-- `pnpm test`: 46 unitários + 43 de integração, todos passando.
+- `pnpm test`: 46 unitários + 44 de integração, todos passando.
 - `pnpm test:e2e`: 14 passando contra o build de produção (`CI=1`, `next start`, sem retentativas).
 - `pnpm eval:agent`: **não executado**, por falta da chave da Anthropic neste ambiente (os 15 cenários aparecem como _skipped_).
 

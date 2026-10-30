@@ -8,7 +8,9 @@ import { agentActions, agentDecisions, agentTurns } from "@/server/db/schema";
 import { appendMessage, findConversation, pageMessages } from "@/server/conversations/repository";
 import { serializeConversation } from "@/server/conversations/serialize";
 import { claimConversation, recoverAbandonedTurns } from "@/server/conversations/use-cases";
-import { ANA, RAFAEL, resetDatabase, sessionUser } from "../support/db";
+import { seedConversations } from "@/server/db/seed-conversations";
+import { liveShowcase } from "@/server/metrics";
+import { ANA, calendar, RAFAEL, resetDatabase, sessionUser } from "../support/db";
 
 let counter = 0;
 
@@ -79,6 +81,21 @@ describe("agent turns (scripted model, real tools and database)", () => {
     expect(card && card.type === "ticket_card" ? card.ticket.number : null).toBe("INC-20501");
     const conversation = await findConversation(db(), one.conversationId);
     expect(conversation?.focusTicketId).not.toBeNull();
+  });
+
+  it("shows the login page live facts from real use only, without identifiers", async () => {
+    await seedConversations(db(), calendar);
+    const before = await liveShowcase("America/Sao_Paulo");
+    expect(before?.lastTurn).toBeNull();
+    expect(before?.today).toEqual({ conversations: 0, tickets: 0, handoffs: 0 });
+
+    // Gabriela has no seeded conversation, so the assistant answers her.
+    const gabriela = await sessionUser("gabriela.rocha@nexo.com.br");
+    await say(gabriela, "Qual o status do meu chamado?");
+    const after = await liveShowcase("America/Sao_Paulo");
+    expect(after?.lastTurn?.steps.length).toBeGreaterThan(0);
+    expect(JSON.stringify(after)).not.toMatch(/INC-|REQ-|Gabriela|Rocha/);
+    expect(after?.today.conversations).toBe(1);
   });
 
   it("detects the overdue SLA from stored timestamps", async () => {
