@@ -40,8 +40,8 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 
 Execução local de 30/10/2026 (Node 26, PostgreSQL 18):
 
-- `pnpm test`: 38 unitários + 26 de integração, todos passando.
-- `pnpm test:e2e`: 10 passando com `next dev` e com `next start` (modo do CI).
+- `pnpm test`: 38 unitários + 27 de integração, todos passando.
+- `pnpm test:e2e`: 11 passando com `next dev`; o job `e2e` do CI roda com `next start`.
 - `pnpm eval:agent`: **não executado**, por falta da chave da Anthropic neste ambiente (os 15 cenários aparecem como _skipped_).
 
 No CI (GitHub Actions) os jobs `verify` e `e2e` rodam em cada PR.
