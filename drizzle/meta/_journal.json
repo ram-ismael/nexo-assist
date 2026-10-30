@@ -15,6 +15,13 @@
       "when": 1793363989347,
       "tag": "0001_agent_turns_started_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793364531173,
+      "tag": "0002_queue_recently_closed_idx",
+      "breakpoints": true
     }
   ]
 }

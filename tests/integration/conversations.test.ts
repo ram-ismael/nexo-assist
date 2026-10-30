@@ -9,7 +9,7 @@ import {
   getOrCreateLiveConversation,
   pageMessages,
 } from "@/server/conversations/repository";
-import { listQueue } from "@/server/conversations/queue";
+import { listQueue, queueCounts } from "@/server/conversations/queue";
 import {
   claimConversation,
   closeConversation,
@@ -155,6 +155,31 @@ describe("conversation lifecycle", () => {
     // The first commit must carry the lower seq; otherwise a client that polled
     // between the two commits would move its cursor past the late message.
     expect(early.seq).toBeLessThan(second?.seq ?? 0);
+  });
+
+  it("counts live and recently closed conversations, not old history", async () => {
+    const { conversation } = await waitingConversation();
+    const rafael = await sessionUser(RAFAEL);
+    const carla = await sessionUser(CARLA);
+    const old = await getOrCreateLiveConversation(db(), carla.id);
+    await db()
+      .update(conversations)
+      .set({ state: "closed", closedAt: new Date(Date.now() - 30 * 86_400_000) })
+      .where(eq(conversations.id, old.id));
+    const recent = await getOrCreateLiveConversation(db(), carla.id);
+    await db()
+      .update(conversations)
+      .set({ state: "closed", closedAt: new Date(Date.now() - 86_400_000) })
+      .where(eq(conversations.id, recent.id));
+
+    expect(await queueCounts(db(), rafael.id)).toEqual({
+      for_you: 1,
+      with_agent: 0,
+      mine: 0,
+      all: 2,
+    });
+    const all = await listQueue(db(), rafael.id, { filter: "all", query: "" });
+    expect(all.map((item) => item.id).sort()).toEqual([conversation.id, recent.id].sort());
   });
 
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {

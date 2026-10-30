@@ -1,0 +1,1 @@
+CREATE INDEX "conversations_recently_closed_idx" ON "conversations" USING btree ("closed_at") WHERE "conversations"."state" = 'closed';

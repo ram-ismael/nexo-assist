@@ -169,6 +169,10 @@ export const conversations = pgTable(
   (table) => [
     index("conversations_employee_idx").on(table.employeeId, table.lastActivityAt),
     index("conversations_state_idx").on(table.state, table.lastActivityAt),
+    // "Recently closed" in the analyst queue without scanning all closed history.
+    index("conversations_recently_closed_idx")
+      .on(table.closedAt)
+      .where(sql`${table.state} = 'closed'`),
     // At most one live conversation per employee; closed ones are history.
     uniqueIndex("conversations_one_live_per_employee")
       .on(table.employeeId)

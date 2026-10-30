@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { QueueItemDTO } from "@/lib/api-types";
 import type { Executor } from "@/server/db/client";
 import {
@@ -15,6 +15,19 @@ export const QUEUE_FILTERS = ["all", "for_you", "with_agent", "mine"] as const;
 export type QueueFilter = (typeof QUEUE_FILTERS)[number];
 
 const RECENTLY_CLOSED_DAYS = 7;
+const OPEN_STATES = ["agent_active", "waiting_analyst", "analyst_active"] as const;
+
+// Written as two indexable branches (open states, recent closed_at) instead of
+// `state <> 'closed'`, which no index serves and grows with the whole history.
+function liveOrRecentlyClosed(): SQL | undefined {
+  return or(
+    inArray(conversations.state, [...OPEN_STATES]),
+    and(
+      eq(conversations.state, "closed"),
+      gt(conversations.closedAt, sql`now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})`),
+    ),
+  );
+}
 
 function filterCondition(filter: QueueFilter, analystId: string): SQL | undefined {
   switch (filter) {
@@ -28,10 +41,7 @@ function filterCondition(filter: QueueFilter, analystId: string): SQL | undefine
         eq(conversations.assignedAnalystId, analystId),
       );
     case "all":
-      return or(
-        ne(conversations.state, "closed"),
-        gt(conversations.closedAt, sql`now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})`),
-      );
+      return liveOrRecentlyClosed();
   }
 }
 
@@ -172,21 +182,25 @@ export async function queueCounts(
     for_you: number;
     with_agent: number;
     mine: number;
-    all: number;
+    open: number;
+    recently_closed: number;
   }>(sql`
     select
       count(*) filter (where state = 'waiting_analyst')::int as for_you,
       count(*) filter (where state = 'agent_active')::int as with_agent,
       count(*) filter (where state = 'analyst_active' and assigned_analyst_id = ${analystId})::int as mine,
-      count(*) filter (where state <> 'closed' or closed_at > now() - make_interval(days => ${RECENTLY_CLOSED_DAYS}))::int as all
+      count(*)::int as open,
+      (select count(*)::int from conversations
+        where state = 'closed' and closed_at > now() - make_interval(days => ${RECENTLY_CLOSED_DAYS})) as recently_closed
     from conversations
+    where state in ('agent_active', 'waiting_analyst', 'analyst_active')
   `);
   const row = result.rows[0];
   return {
     for_you: Number(row?.for_you ?? 0),
     with_agent: Number(row?.with_agent ?? 0),
     mine: Number(row?.mine ?? 0),
-    all: Number(row?.all ?? 0),
+    all: Number(row?.open ?? 0) + Number(row?.recently_closed ?? 0),
   };
 }
 
