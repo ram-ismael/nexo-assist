@@ -49,8 +49,9 @@ export type MessageDTO = {
 export type ConversationDTO = {
   id: string;
   state: ConversationState;
-  agentTurnCount: number;
-  agentTurnLimit: number;
+  /** Employee messages in this session and the PRD limit (30), whoever answers. */
+  sessionMessageCount: number;
+  sessionMessageLimit: number;
   assignedAnalyst: { id: string; name: string; supportLevel: string | null } | null;
   employee: { id: string; name: string; email: string; department: string };
   lastActivityAt: string;

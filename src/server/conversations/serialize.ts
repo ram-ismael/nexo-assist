@@ -3,6 +3,7 @@ import type { ConversationDTO, DraftDTO, MessageDTO } from "@/lib/api-types";
 import type { Executor } from "@/server/db/client";
 import { users } from "@/server/db/schema";
 import {
+  countEmployeeMessages,
   hasRunningTurn,
   loadActionsForTurns,
   loadDrafts,
@@ -106,12 +107,12 @@ export function employeeTyping(
 export async function serializeConversation(
   executor: Executor,
   conversation: ConversationRow,
-  agentTurnLimit: number,
+  sessionMessageLimit: number,
 ): Promise<ConversationDTO> {
   const ids = [conversation.employeeId, conversation.assignedAnalystId].filter(
     (id): id is string => !!id,
   );
-  const [people, busy] = await Promise.all([
+  const [people, busy, sent] = await Promise.all([
     executor
       .select({
         id: users.id,
@@ -123,6 +124,7 @@ export async function serializeConversation(
       .from(users)
       .where(ids.length === 1 ? eq(users.id, conversation.employeeId) : inArray(users.id, ids)),
     hasRunningTurn(executor, conversation.id),
+    countEmployeeMessages(executor, conversation.id),
   ]);
   const employee = people.find((person) => person.id === conversation.employeeId);
   const analyst = people.find((person) => person.id === conversation.assignedAnalystId);
@@ -130,8 +132,8 @@ export async function serializeConversation(
   return {
     id: conversation.id,
     state: conversation.state,
-    agentTurnCount: conversation.agentTurnCount,
-    agentTurnLimit,
+    sessionMessageCount: sent,
+    sessionMessageLimit,
     assignedAnalyst: analyst
       ? { id: analyst.id, name: analyst.name, supportLevel: analyst.supportLevel }
       : null,

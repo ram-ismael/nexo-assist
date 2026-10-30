@@ -17,6 +17,7 @@ import { consume } from "@/server/rate-limit";
 import {
   appendMessage,
   findConversation,
+  countEmployeeMessages,
   findMessageByClientId,
   getOrCreateLiveConversation,
   loadSenders,
@@ -121,6 +122,14 @@ export async function submitEmployeeMessage(
     } else {
       const existing = await findMessageByClientId(tx, conversation.id, input.clientId);
       if (existing) return { mode: "duplicate" as const, message: existing, conversation };
+      // PRD: 30 messages per session, whoever answers (assistant or analyst).
+      // A retry reuses the stored message, so it never counts twice.
+      if ((await countEmployeeMessages(tx, conversation.id)) >= env.AGENT_SESSION_MESSAGE_LIMIT) {
+        throw new AppError(
+          "limit_reached",
+          `Esta sessão chegou ao limite de ${env.AGENT_SESSION_MESSAGE_LIMIT} mensagens. Comece uma nova conversa para continuar.`,
+        );
+      }
     }
 
     if (conversation.state !== "agent_active") {
@@ -136,12 +145,6 @@ export async function submitEmployeeMessage(
       return { mode: "human" as const, message: userMessage, conversation };
     }
 
-    if (conversation.agentTurnCount >= env.AGENT_SESSION_MESSAGE_LIMIT) {
-      throw new AppError(
-        "limit_reached",
-        `Esta sessão chegou ao limite de ${env.AGENT_SESSION_MESSAGE_LIMIT} mensagens com o assistente. Comece uma nova conversa ou fale com um analista.`,
-      );
-    }
     // A turn whose function was killed would otherwise block this conversation forever.
     if (await reapAbandonedTurns(tx, conversation.id)) {
       conversation = (await lockConversation(tx, conversation.id)) ?? conversation;

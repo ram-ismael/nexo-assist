@@ -10,7 +10,10 @@ import { ticketSnapshot, type TicketRow } from "@/server/tickets/service";
 import { performHandoff } from "./handoff";
 import {
   appendMessage,
+  countEmployeeMessages,
+  findLiveConversation,
   findMessageByClientId,
+  getOrCreateLiveConversation,
   hasAbandonedTurn,
   lockConversation,
   reapAbandonedTurns,
@@ -328,4 +331,48 @@ export async function touchEmployeePresence(employeeId: string, conversationId: 
         ),
       ),
     );
+}
+
+/**
+ * "Nova conversa". Allowed when the current one is closed, still empty, or has
+ * used up its message limit (PRD: 30 per session). While a person is handling
+ * the employee and messages are left, the current one must go on. A session
+ * that hit the limit with an analyst is closed for the analyst too, with a
+ * system line saying why, so nobody is left waiting on it.
+ */
+export async function startNewConversation(employeeId: string, limit: number) {
+  return db().transaction(async (tx) => {
+    const live = await findLiveConversation(tx, employeeId);
+    if (live) {
+      const locked = await lockConversation(tx, live.id);
+      if (!locked) throw conflict("Tente novamente.");
+      const sent = await countEmployeeMessages(tx, locked.id);
+      const exhausted = sent >= limit;
+      if (locked.state !== "agent_active" && !exhausted) {
+        throw conflict(
+          "Você está sendo atendido por um analista nesta conversa. Continue por ela.",
+        );
+      }
+      if (sent === 0 && locked.state === "agent_active") return locked;
+      const now = new Date();
+      await transitionConversation(tx, locked, "closed", {}, now);
+      await tx
+        .update(handoffs)
+        .set({ resolvedAt: now })
+        .where(and(eq(handoffs.conversationId, locked.id), isNull(handoffs.resolvedAt)));
+      await appendMessage(
+        tx,
+        {
+          conversationId: locked.id,
+          kind: "system",
+          senderId: null,
+          content: exhausted
+            ? `Sessão encerrada: limite de ${limit} mensagens atingido. O funcionário começou uma nova conversa`
+            : "Sessão encerrada pelo funcionário para começar uma nova conversa",
+        },
+        now,
+      );
+    }
+    return getOrCreateLiveConversation(tx, employeeId);
+  });
 }

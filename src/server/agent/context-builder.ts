@@ -2,11 +2,16 @@ import { TZDate } from "@date-fns/tz";
 import { and, desc, eq } from "drizzle-orm";
 import { isWithinBusinessHours, type BusinessCalendar } from "@/domain/sla";
 import { PRIORITY_LABEL } from "@/domain/tickets";
+import { config } from "@/lib/config";
 import type { SessionUser } from "@/server/auth/sessions";
 import type { Executor } from "@/server/db/client";
 import { messages, ticketDrafts, tickets } from "@/server/db/schema";
 import type { MessageBlock } from "@/server/messages/blocks";
-import type { ConversationRow, MessageRow } from "@/server/conversations/repository";
+import {
+  countEmployeeMessages,
+  type ConversationRow,
+  type MessageRow,
+} from "@/server/conversations/repository";
 
 /** Recent messages replayed to the model. Older context lives in tickets and handoffs. */
 export const CONTEXT_MESSAGES = 16;
@@ -105,11 +110,13 @@ export async function turnFacts(
       )[0]
     : undefined;
   const draft = pending[0];
+  const sent = await countEmployeeMessages(executor, conversation.id);
+  const limit = config().AGENT_SESSION_MESSAGE_LIMIT;
   const lines = [
     "# Contexto deste atendimento",
     `- Funcionário: ${user.name}, área ${user.department}. Computador: ${user.deviceOs ?? "não informado"}.`,
     `- Agora: ${formatLocal(now, calendar)} (${calendar.timeZone}). Service desk ${isWithinBusinessHours(now, calendar) ? "aberto" : "fora do horário (só críticos têm plantão)"}; expediente seg-sex ${calendar.dayStartHour}h-${calendar.dayEndHour}h.`,
-    `- Mensagens do funcionário nesta sessão: ${conversation.agentTurnCount}.`,
+    `- Mensagens do funcionário nesta sessão: ${sent} de ${limit}.`,
   ];
   if (focus) lines.push(`- Chamado em foco: ${focus.number} (${focus.title}).`);
   if (draft) {

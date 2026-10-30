@@ -138,8 +138,15 @@ function planFor(text: string): Step[] {
       },
       {
         kind: "text",
-        text: (results) =>
-          `Você tem ${String(results[0]?.total ?? 0)} chamados abertos. Sobre qual deles quer saber?`,
+        // Mirrors what the tool showed: nothing to pick, one card, or a list.
+        text: (results) => {
+          const total = Number(results[0]?.total ?? 0);
+          if (total === 0) {
+            return "Você não tem chamados abertos no momento. Quer abrir um ou tirar alguma dúvida?";
+          }
+          if (total === 1) return "Você tem um chamado aberto; os detalhes estão no cartão abaixo.";
+          return `Você tem ${total} chamados abertos. Sobre qual deles quer saber?`;
+        },
       },
     ];
   }

@@ -40,6 +40,7 @@ class Story {
     private readonly employeeId: string,
   ) {}
 
+  /** Minutes before `now`: a smaller number is later, so a story counts down. */
   at(minutesAgo: number): Date {
     return new Date(this.now.getTime() - minutesAgo * 60_000);
   }
@@ -638,17 +639,17 @@ export async function seedConversations(
     });
     await fabio.claim(22 * 60 - 14, rafael);
     await fabio.analyst(
-      22 * 60 - 13,
+      22 * 60 - 15,
       rafael.id,
       "Oi, Fábio! Aqui é o Rafael. Liberei o Power BI Desktop para o seu perfil. Atualize o portal que ele aparece em Análise de dados.",
     );
-    await fabio.employee(22 * 60 - 9, "Apareceu e já instalou. Obrigado!");
+    await fabio.employee(22 * 60 - 19, "Apareceu e já instalou. Obrigado!");
     await fabio.analyst(
-      22 * 60 - 8,
+      22 * 60 - 20,
       rafael.id,
       "Perfeito. Vou encerrar por aqui; qualquer coisa é só chamar.",
     );
-    await fabio.close(22 * 60 - 7, rafael);
+    await fabio.close(22 * 60 - 21, rafael);
     await fabio.markRead();
   }
 

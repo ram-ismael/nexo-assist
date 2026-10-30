@@ -7,15 +7,13 @@ import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/layout/employee-shell";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
-import type { ConversationState } from "@/domain/conversations";
 import { Composer } from "./composer";
-import { MessageList } from "./message-list";
+import { EMPLOYEE_COLUMN, MessageList } from "./message-list";
+import { PastConversationView } from "./past-conversation-view";
+import { PastConversations, type PastItem } from "./past-conversations";
 import { TypingIndicator } from "./typing-indicator";
 import { useChat } from "./use-chat";
 import { useTypingSignal } from "./use-typing-signal";
@@ -26,14 +24,6 @@ const SUGGESTIONS = [
   "Preciso de um segundo monitor",
   "Qual o horário do service desk?",
 ];
-
-type HistoryItem = {
-  id: string;
-  state: ConversationState;
-  lastMessagePreview: string | null;
-  lastActivityAt: string;
-  closedAt: string | null;
-};
 
 const ASSISTANT_PILL: Record<AssistantStatus, { text: string; tone: string; dot: string }> = {
   online: {
@@ -112,14 +102,16 @@ export function ChatView({
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [newBusy, setNewBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[] | null>(null);
-  const [viewing, setViewing] = useState<MessagePageDTO | null>(null);
+  // A previous conversation shown in the chat area (picked in the drawer).
+  const [viewing, setViewing] = useState<PastItem | null>(null);
+  const backToCurrent = useCallback(() => setViewing(null), []);
 
   const state = conversation?.state ?? "agent_active";
-  const limitReached =
-    !!conversation &&
-    conversation.agentTurnCount >= conversation.agentTurnLimit &&
-    state === "agent_active";
+  // PRD: 30 messages per session, whoever answers (assistant or analyst).
+  const sent = conversation?.sessionMessageCount ?? 0;
+  const sessionLimit = conversation?.sessionMessageLimit ?? 30;
+  const limitReached = !!conversation && state !== "closed" && sent >= sessionLimit;
+  const nearLimit = !limitReached && sent >= sessionLimit - 5;
   const lastMessage = messages[messages.length - 1];
   // A turn still running on the server that this tab is not streaming (reload,
   // dropped connection): show it, and hold new messages the server would refuse.
@@ -151,9 +143,9 @@ export function ChatView({
     const base = "Atendimento · Nexo Assist";
     document.title = unseenReplies > 0 ? `(${unseenReplies}) ${base}` : base;
   }, [unseenReplies]);
-  const typingSignal = useTypingSignal(conversation?.id, withPerson && !viewing);
+  const typingSignal = useTypingSignal(conversation?.id, withPerson);
   const analystTyping =
-    state === "analyst_active" && !!conversation?.typing.analyst && !viewing
+    state === "analyst_active" && !!conversation?.typing.analyst
       ? (conversation.assignedAnalyst?.name.split(" ")[0] ?? "Analista")
       : null;
 
@@ -186,34 +178,10 @@ export function ChatView({
     }
   };
 
-  const openHistory = async () => {
-    setHistoryOpen(true);
-    try {
-      const result = await api<{ items: HistoryItem[] }>("/api/conversations");
-      setHistory(result.items);
-    } catch (error) {
-      toast("error", errorMessage(error));
-      setHistoryOpen(false);
-    }
-  };
-
-  const openPast = async (id: string) => {
-    setHistoryOpen(false);
-    if (id === conversation?.id) {
-      setViewing(null);
-      return;
-    }
-    try {
-      setViewing(await api<MessagePageDTO>(`/api/conversations/${id}/messages?limit=50`));
-    } catch (error) {
-      toast("error", errorMessage(error));
-    }
-  };
-
   const handlersFor = useCallback(
     (message: MessageDTO, isLast: boolean) => ({
       onReply:
-        isLast && message.kind === "agent" && state === "agent_active" && !pending && !viewing
+        isLast && message.kind === "agent" && state === "agent_active" && !pending
           ? (text: string) => void chat.send(text)
           : undefined,
       onChanged: async () => {
@@ -221,7 +189,7 @@ export function ChatView({
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, pending, viewing, chat.send, chat.sync],
+    [state, pending, chat.send, chat.sync],
   );
 
   const placeholder =
@@ -235,7 +203,14 @@ export function ChatView({
         title="Atendimento"
         right={
           <div className="flex items-center gap-2">
-            <StatusPill conversation={conversation} assistant={chat.assistant} />
+            {viewing ? (
+              <span className="bg-desk text-ink-2 inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[14px] font-medium">
+                <History className="size-4" aria-hidden="true" />
+                <span className="max-sm:sr-only">Conversa anterior</span>
+              </span>
+            ) : (
+              <StatusPill conversation={conversation} assistant={chat.assistant} />
+            )}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
                 aria-label="Mais opções"
@@ -257,14 +232,17 @@ export function ChatView({
                     <Headset className="size-4" aria-hidden="true" /> Falar com um analista
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    disabled={newBusy || state === "waiting_analyst" || state === "analyst_active"}
+                    disabled={
+                      newBusy ||
+                      ((state === "waiting_analyst" || state === "analyst_active") && !limitReached)
+                    }
                     onSelect={startNew}
                     className="data-[highlighted]:bg-desk flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[14px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
                   >
                     <Plus className="size-4" aria-hidden="true" /> Nova conversa
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    onSelect={openHistory}
+                    onSelect={() => setHistoryOpen(true)}
                     className="data-[highlighted]:bg-desk flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[14px] outline-none"
                   >
                     <History className="size-4" aria-hidden="true" /> Conversas anteriores
@@ -277,186 +255,170 @@ export function ChatView({
       />
 
       {viewing ? (
-        <div className="border-rule bg-desk flex items-center justify-between gap-3 border-b px-4 py-2.5 text-[14px] sm:px-8">
-          <span className="text-ink-2">
-            Visualizando uma conversa anterior (
-            {formatDateTime(viewing.conversation.lastActivityAt, timeZone)}).
-          </span>
-          <Button size="sm" variant="secondary" onClick={() => setViewing(null)}>
-            Voltar para a conversa atual
-          </Button>
-        </div>
-      ) : null}
-
-      <MessageList
-        key={viewing?.conversation.id ?? conversation?.id ?? "new"}
-        messages={viewing ? viewing.messages : messages}
-        viewer="employee"
-        layout="employee"
-        timeZone={timeZone}
-        hasMoreBefore={viewing ? false : chat.hasMoreBefore}
-        loadingOlder={chat.loadingOlder}
-        olderError={chat.olderError}
-        onLoadOlder={chat.loadOlder}
-        handlersFor={handlersFor}
-        pending={viewing ? null : pending}
-        empty={
-          <div className="mx-auto mt-[8vh] max-w-[560px] text-center">
-            <h1 className="font-display text-ink text-[34px] leading-tight">Como posso ajudar?</h1>
-            <p className="text-ink-3 mt-2 text-[15px]">
-              Descreva o problema com suas palavras. Eu consulto seus chamados, busco na central de
-              ajuda e chamo um analista quando precisar.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((suggestion) => (
-                <Button
-                  key={suggestion}
-                  variant="chip"
-                  disabled={!!pending}
-                  onClick={() => void chat.send(suggestion)}
-                  className="h-10 rounded-lg text-[14px]"
-                >
-                  {suggestion}
-                </Button>
-              ))}
-            </div>
-          </div>
-        }
-        inPlace={chat.streamedInPlace}
-        typing={
-          viewing ? null : processingElsewhere ? (
-            <TypingIndicator name="Nexo Assist" align="left" tone="paper" />
-          ) : analystTyping ? (
-            <TypingIndicator name={analystTyping} align="left" tone="analyst" />
-          ) : null
-        }
-        footer={
-          !viewing &&
-          !analystTyping &&
-          (state === "waiting_analyst" || state === "analyst_active") &&
-          lastMessage?.kind !== "analyst" ? (
-            <div
-              className="bg-warning-soft text-warning-text flex items-center gap-2 self-start rounded-lg px-3.5 py-2.5 text-[14px]"
-              role="status"
-            >
-              {state === "waiting_analyst" ? (
-                <Clock3 className="size-4" aria-hidden="true" />
-              ) : (
-                <Headset className="size-4" aria-hidden="true" />
-              )}
-              {state === "waiting_analyst"
-                ? "Sua conversa está na fila do service desk. O assistente está pausado; o analista responde por aqui."
-                : `${conversation?.assignedAnalyst?.name ?? "Um analista"} está atendendo você.`}
-            </div>
-          ) : null
-        }
-      />
-
-      {!viewing ? (
-        <div className="shrink-0 px-4 pb-4 sm:px-8 lg:pr-12 lg:pl-[17%]">
-          <div className="mx-auto w-full max-w-[1120px] lg:max-w-none">
-            {failure ? (
-              <div
-                role="alert"
-                className="border-danger/25 bg-danger-soft text-danger-text mb-3 flex flex-wrap items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[14px]"
-              >
-                <span className="flex-1">{failure.message}</span>
-                {failure.retryable && failure.messageId ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() =>
-                      void chat.send("", { retryOfMessageId: failure.messageId ?? undefined })
-                    }
-                  >
-                    <RotateCcw className="size-3.5" aria-hidden="true" /> Tentar de novo
-                  </Button>
-                ) : null}
-                {conversation && state === "agent_active" ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={requestAnalyst}
-                    loading={handoffBusy}
-                  >
-                    <Headset className="size-3.5" aria-hidden="true" /> Falar com um analista
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {chat.syncError ? (
-              <p className="text-warning-text mb-2 flex items-center gap-2 text-[13px]">
-                <WifiOff className="size-4" aria-hidden="true" /> Sem conexão. Tentando sincronizar…
-              </p>
-            ) : null}
-            {state === "closed" || limitReached ? (
-              <div className="border-rule bg-desk flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-[15px]">
-                <span className="text-ink-2">
-                  {state === "closed"
-                    ? "Esta conversa foi encerrada. O histórico continua disponível."
-                    : `Esta sessão chegou ao limite de ${conversation?.agentTurnLimit} mensagens com o assistente.`}
-                </span>
-                <div className="flex gap-2">
-                  {limitReached ? (
-                    <Button variant="secondary" onClick={requestAnalyst} loading={handoffBusy}>
-                      Falar com um analista
+        <PastConversationView
+          key={viewing.id}
+          item={viewing}
+          timeZone={timeZone}
+          onBack={backToCurrent}
+        />
+      ) : (
+        <>
+          <MessageList
+            key={conversation?.id ?? "new"}
+            messages={messages}
+            viewer="employee"
+            layout="employee"
+            timeZone={timeZone}
+            hasMoreBefore={chat.hasMoreBefore}
+            loadingOlder={chat.loadingOlder}
+            olderError={chat.olderError}
+            onLoadOlder={chat.loadOlder}
+            handlersFor={handlersFor}
+            pending={pending}
+            empty={
+              <div className="mx-auto mt-[8vh] max-w-[560px] text-center">
+                <h1 className="font-display text-ink text-[34px] leading-tight">
+                  Como posso ajudar?
+                </h1>
+                <p className="text-ink-3 mt-2 text-[15px]">
+                  Descreva o problema com suas palavras. Eu consulto seus chamados, busco na central
+                  de ajuda e chamo um analista quando precisar.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {SUGGESTIONS.map((suggestion) => (
+                    <Button
+                      key={suggestion}
+                      variant="chip"
+                      disabled={!!pending}
+                      onClick={() => void chat.send(suggestion)}
+                      className="h-10 rounded-lg text-[14px]"
+                    >
+                      {suggestion}
                     </Button>
-                  ) : null}
-                  <Button onClick={startNew} loading={newBusy}>
-                    <Plus className="size-4" aria-hidden="true" /> Nova conversa
-                  </Button>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <Composer
-                draftKey={`nexo-draft-${userId}`}
-                placeholder={placeholder}
-                // Typing stays possible while an answer is on its way; only sending waits.
-                busy={!!pending || processingElsewhere}
-                typing={withPerson ? typingSignal : undefined}
-                onSend={(text) => chat.send(text)}
-              />
-            )}
-            <p className="text-ink-3 mt-2 text-right text-[13px]">
-              {conversation && state === "agent_active"
-                ? `${conversation.agentTurnCount}/${conversation.agentTurnLimit} mensagens nesta sessão`
-                : state === "waiting_analyst" || state === "analyst_active"
-                  ? "Mensagens para o analista não contam no limite da sessão"
-                  : " "}
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen} title="Conversas anteriores">
-        {!history ? (
-          <div className="flex justify-center py-6">
-            <Spinner label="Carregando" />
-          </div>
-        ) : history.length === 0 ? (
-          <p className="text-ink-3 text-sm">Nenhuma conversa ainda.</p>
-        ) : (
-          <ul className="divide-rule divide-y">
-            {history.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => void openPast(item.id)}
-                  className="hover:bg-desk flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-3 text-left"
+            }
+            inPlace={chat.streamedInPlace}
+            typing={
+              processingElsewhere ? (
+                <TypingIndicator name="Nexo Assist" align="left" tone="paper" />
+              ) : analystTyping ? (
+                <TypingIndicator name={analystTyping} align="left" tone="analyst" />
+              ) : null
+            }
+            footer={
+              !analystTyping &&
+              (state === "waiting_analyst" || state === "analyst_active") &&
+              lastMessage?.kind !== "analyst" ? (
+                <div
+                  className="bg-warning-soft text-warning-text flex items-center gap-2 self-start rounded-lg px-3.5 py-2.5 text-[14px]"
+                  role="status"
                 >
-                  <span className="text-ink-3 text-[13px]">
-                    {formatDateTime(item.lastActivityAt, timeZone)} ·{" "}
-                    {item.state === "closed" ? "Encerrada" : "Atual"}
+                  {state === "waiting_analyst" ? (
+                    <Clock3 className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Headset className="size-4" aria-hidden="true" />
+                  )}
+                  {state === "waiting_analyst"
+                    ? "Sua conversa está na fila do service desk. O assistente está pausado; o analista responde por aqui."
+                    : `${conversation?.assignedAnalyst?.name ?? "Um analista"} está atendendo você.`}
+                </div>
+              ) : null
+            }
+          />
+
+          {/* Same column as the messages, with the scroll gutter mirrored, so the
+          composer edges line up with the bubbles above. */}
+          <div className="shrink-0 [scrollbar-gutter:stable_both-edges] overflow-hidden pb-4">
+            <div className={EMPLOYEE_COLUMN}>
+              {failure ? (
+                <div
+                  role="alert"
+                  className="border-danger/25 bg-danger-soft text-danger-text mb-3 flex flex-wrap items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[14px]"
+                >
+                  <span className="flex-1">{failure.message}</span>
+                  {failure.retryable && failure.messageId ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        void chat.send("", { retryOfMessageId: failure.messageId ?? undefined })
+                      }
+                    >
+                      <RotateCcw className="size-3.5" aria-hidden="true" /> Tentar de novo
+                    </Button>
+                  ) : null}
+                  {conversation && state === "agent_active" ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={requestAnalyst}
+                      loading={handoffBusy}
+                    >
+                      <Headset className="size-3.5" aria-hidden="true" /> Falar com um analista
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              {chat.syncError ? (
+                <p className="text-warning-text mb-2 flex items-center gap-2 text-[13px]">
+                  <WifiOff className="size-4" aria-hidden="true" /> Sem conexão. Tentando
+                  sincronizar…
+                </p>
+              ) : null}
+              {state === "closed" || limitReached ? (
+                <div className="border-rule bg-desk flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-[15px]">
+                  <span className="text-ink-2">
+                    {state === "closed"
+                      ? "Esta conversa foi encerrada. O histórico continua disponível."
+                      : `Esta sessão chegou ao limite de ${sessionLimit} mensagens. Continue numa nova conversa: seus chamados seguem disponíveis.`}
                   </span>
-                  <span className="text-ink line-clamp-1 text-[15px]">
-                    {item.lastMessagePreview ?? "Sem mensagens"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Dialog>
+                  <div className="flex gap-2">
+                    <Button onClick={startNew} loading={newBusy}>
+                      <Plus className="size-4" aria-hidden="true" /> Nova conversa
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Composer
+                  draftKey={`nexo-draft-${userId}`}
+                  placeholder={placeholder}
+                  // Typing stays possible while an answer is on its way; only sending waits.
+                  busy={!!pending || processingElsewhere}
+                  typing={withPerson ? typingSignal : undefined}
+                  onSend={(text) => chat.send(text)}
+                />
+              )}
+              <p
+                className={cn(
+                  "mt-2 text-right text-[13px] tabular-nums transition-colors",
+                  nearLimit || limitReached ? "text-warning-text font-medium" : "text-ink-3",
+                )}
+                aria-live="polite"
+              >
+                {conversation && state !== "closed"
+                  ? `${sent}/${sessionLimit} mensagens nesta sessão`
+                  : "\u00a0"}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {historyOpen ? (
+        <PastConversations
+          currentId={conversation?.id ?? null}
+          viewingId={viewing?.id ?? null}
+          timeZone={timeZone}
+          onClose={() => setHistoryOpen(false)}
+          onPick={(item) => {
+            setHistoryOpen(false);
+            // The current conversation is the live chat; anything else opens read-only.
+            setViewing(item.id === conversation?.id ? null : item);
+          }}
+        />
+      ) : null}
     </>
   );
 }

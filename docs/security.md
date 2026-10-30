@@ -49,15 +49,15 @@ O ponto de troca é `src/app/api/auth/login/route.ts`. Com OIDC (Entra ID, Okta,
 
 ## Abuso e custo
 
-| Controle                   | Padrão               | Onde                             |
-| -------------------------- | -------------------- | -------------------------------- |
-| Turnos por funcionário     | 8/min, 150/dia       | `rate_limits` (Postgres)         |
-| Turnos globais             | 1.500/dia            | `LLM_GLOBAL_DAILY_TURNS`         |
-| Mensagens por sessão       | 30                   | `conversations.agent_turn_count` |
-| Logins por IP              | 20 / 10 min          | `rate_limits`                    |
-| Tokens de saída por passo  | 1.200                | `LLM_MAX_OUTPUT_TOKENS`          |
-| Passos por turno / timeout | 8 / 45 s             | `turn.ts`                        |
-| Um turno por conversa      | índice único parcial | `agent_turns`                    |
+| Controle                   | Padrão               | Onde                           |
+| -------------------------- | -------------------- | ------------------------------ |
+| Turnos por funcionário     | 8/min, 150/dia       | `rate_limits` (Postgres)       |
+| Turnos globais             | 1.500/dia            | `LLM_GLOBAL_DAILY_TURNS`       |
+| Mensagens por sessão       | 30 (do funcionário)  | mensagens gravadas na conversa |
+| Logins por IP              | 20 / 10 min          | `rate_limits`                  |
+| Tokens de saída por passo  | 1.200                | `LLM_MAX_OUTPUT_TOKENS`        |
+| Passos por turno / timeout | 8 / 45 s             | `turn.ts`                      |
+| Um turno por conversa      | índice único parcial | `agent_turns`                  |
 
 Recomendado também: limite de gasto mensal no console da Anthropic e na Vercel.
 

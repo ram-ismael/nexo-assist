@@ -83,6 +83,14 @@ export async function listEmployeeConversations(
       id: conversations.id,
       state: conversations.state,
       lastMessagePreview: conversations.lastMessagePreview,
+      // What the conversation was about: the employee's first message. The outer
+      // column is qualified by hand: inside a select list Drizzle renders it as a
+      // bare "id", which the subquery would resolve to the message's own id.
+      topic: sql<string | null>`(
+        select m.content from ${messages} m
+        where m.conversation_id = "conversations"."id" and m.kind = 'employee'
+        order by m.seq limit 1
+      )`,
       lastActivityAt: conversations.lastActivityAt,
       createdAt: conversations.createdAt,
       closedAt: conversations.closedAt,
@@ -156,6 +164,22 @@ function describeBlocks(blocks: MessageBlock[]): string {
     default:
       return "";
   }
+}
+
+/**
+ * Messages the employee sent in this conversation: the PRD's "30 mensagens por
+ * sessão", whoever answers them (assistant or analyst). Read from the stored
+ * messages themselves, so it can never drift from what is on screen.
+ */
+export async function countEmployeeMessages(
+  executor: Executor,
+  conversationId: string,
+): Promise<number> {
+  const rows = await executor
+    .select({ count: sql<number>`count(*)::int` })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.kind, "employee")));
+  return Number(rows[0]?.count ?? 0);
 }
 
 export async function findMessageByClientId(

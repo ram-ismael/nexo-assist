@@ -25,6 +25,12 @@ export const BUBBLE = {
     "rounded-tl-[6px] border border-success/20 bg-analyst-bubble px-[18px] py-3 shadow-[0_1px_2px_rgba(27,36,49,0.05)]",
 };
 
+/**
+ * The employee chat is one centered column shared by the messages, the
+ * composer and the session counter, so every edge lines up (reference T2).
+ */
+export const EMPLOYEE_COLUMN = "mx-auto w-full max-w-[960px] px-4 sm:px-8";
+
 const CONSOLE_BUBBLE = {
   base: "rounded-[16px] text-[15px] leading-[1.55] shadow-[0_1px_2px_rgba(27,36,49,0.07)]",
   employee: "rounded-tl-[6px] bg-paper px-4 py-2.5 text-ink",
@@ -104,7 +110,7 @@ function EmployeeViewMessage({
             BUBBLE.mine,
             // In a run of messages only the last one keeps the tail.
             followed && "rounded-br-[18px]",
-            "max-w-[min(560px,82%)] [overflow-wrap:anywhere] whitespace-pre-wrap",
+            "max-w-[min(620px,80%)] [overflow-wrap:anywhere] whitespace-pre-wrap",
           )}
         >
           {message.content}
@@ -143,7 +149,7 @@ function EmployeeViewMessage({
             isAnalyst ? BUBBLE.analyst : BUBBLE.agent,
             // In a run of messages only the first one (under the name) keeps the tail.
             grouped && "rounded-tl-[18px]",
-            "max-w-[min(720px,100%)]",
+            "max-w-[min(680px,88%)]",
           )}
         >
           {message.content ? (
@@ -252,7 +258,7 @@ function PendingReply({ pending }: { pending: PendingTurn }) {
             className={cn(
               BUBBLE.base,
               BUBBLE.mine,
-              "max-w-[min(560px,82%)] [overflow-wrap:anywhere] whitespace-pre-wrap opacity-70",
+              "max-w-[min(620px,80%)] [overflow-wrap:anywhere] whitespace-pre-wrap opacity-70",
             )}
           >
             {pending.text}
@@ -268,7 +274,7 @@ function PendingReply({ pending }: { pending: PendingTurn }) {
           <ActionTrail actions={pending.actions} turnId={null} viewer="employee" />
           <div
             className={cn(
-              "animate-rise max-w-[min(720px,100%)]",
+              "animate-rise max-w-[min(680px,88%)]",
               BUBBLE.base,
               BUBBLE.agent,
               !pending.reply && "flex h-12 items-center",
@@ -407,7 +413,8 @@ export function MessageList({
         ref={scroller}
         onScroll={onScroll}
         className={cn(
-          "h-full overflow-y-auto overscroll-contain",
+          // Same gutter on both sides: the column stays centred like the composer below.
+          "h-full [scrollbar-gutter:stable_both-edges] overflow-y-auto overscroll-contain",
           layout === "console" ? "bg-chat" : "bg-paper",
         )}
         role="log"
@@ -418,7 +425,7 @@ export function MessageList({
           className={cn(
             "mx-auto flex w-full flex-col",
             layout === "employee"
-              ? "max-w-[1120px] gap-6 px-4 pt-8 pb-6 sm:px-8 lg:pr-12 lg:pl-[17%]"
+              ? `${EMPLOYEE_COLUMN} gap-6 pt-8 pb-6`
               : "gap-4 px-4 py-6 sm:px-10",
           )}
         >

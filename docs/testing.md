@@ -32,7 +32,8 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 | Prazo vencido calculado de timestamps                             | `agent.test.ts`                                         |
 | Agent para durante atendimento humano                             | `agent.test.ts`                                         |
 | Ferramenta negada se o analista assumir no meio                   | `agent.test.ts`                                         |
-| Limite de 30 mensagens no servidor                                | `agent.test.ts`                                         |
+| Limite de 30 mensagens por sessão, inclusive com o analista       | `agent.test.ts`, `conversations.test.ts`                |
+| 0 ou 1 chamado: sem lista para escolher                           | `agent.test.ts`                                         |
 | Provedor fora do ar sem resposta inventada                        | `agent.test.ts`                                         |
 | Jornada consulta → vencido → transferência → analista → devolução | `e2e/journey.spec.ts`                                   |
 | Chamado só depois de confirmar                                    | `e2e/journey.spec.ts`                                   |
@@ -51,7 +52,7 @@ Os bancos de teste são recriados a cada execução (truncate + seed). Sem `DATA
 
 Execução local de 30/10/2026 (Node 26, PostgreSQL 18):
 
-- `pnpm test`: 46 unitários + 38 de integração, todos passando.
+- `pnpm test`: 46 unitários + 43 de integração, todos passando.
 - `pnpm test:e2e`: 14 passando contra o build de produção (`CI=1`, `next start`, sem retentativas).
 - `pnpm eval:agent`: **não executado**, por falta da chave da Anthropic neste ambiente (os 15 cenários aparecem como _skipped_).
 

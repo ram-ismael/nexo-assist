@@ -19,6 +19,7 @@ import {
   postAnalystMessage,
   returnToAgent,
   signalTyping,
+  startNewConversation,
   touchEmployeePresence,
 } from "@/server/conversations/use-cases";
 import { createTicketDraft, editDraft, findDraftForEmployee } from "@/server/tickets/drafts";
@@ -294,6 +295,31 @@ describe("conversation lifecycle", () => {
       .values({ conversationId: anaLive.id, userMessageSeq: 1, model: "x" });
     const [withAgent] = await listQueue(db(), rafael.id, { filter: "with_agent", query: "" });
     expect(withAgent).toMatchObject({ id: anaLive.id, agentBusy: true, hadHandoff: true });
+  });
+
+  it("starts a new conversation only when the current one may end", async () => {
+    const { ana, conversation } = await waitingConversation();
+    // With a person on the other side and messages left, the session goes on.
+    await expect(startNewConversation(ana.id, 30)).rejects.toMatchObject({ code: "conflict" });
+
+    // At the limit, a new conversation closes the old one for the analyst too.
+    for (let index = 0; index < 3; index += 1) {
+      await appendMessage(db(), {
+        conversationId: conversation.id,
+        kind: "employee",
+        senderId: ana.id,
+        content: `mensagem ${index}`,
+      });
+    }
+    const next = await startNewConversation(ana.id, 3);
+    expect(next.id).not.toBe(conversation.id);
+    const old = await findConversation(db(), conversation.id);
+    expect(old?.state).toBe("closed");
+    const page = await pageMessages(db(), conversation.id, { limit: 5 });
+    expect(page.messages.at(-1)?.content).toContain("limite de 3 mensagens");
+
+    // An empty conversation is reused instead of piling up new ones.
+    expect((await startNewConversation(ana.id, 3)).id).toBe(next.id);
   });
 
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {

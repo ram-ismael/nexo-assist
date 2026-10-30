@@ -4,13 +4,25 @@ import { resetConfigForTests } from "@/lib/config";
 import { runAgentTurn, submitEmployeeMessage, type StreamEvent } from "@/server/agent/turn";
 import type { SessionUser } from "@/server/auth/sessions";
 import { closeDb, db } from "@/server/db/client";
-import { agentActions, agentDecisions, agentTurns, conversations } from "@/server/db/schema";
-import { findConversation, pageMessages } from "@/server/conversations/repository";
+import { agentActions, agentDecisions, agentTurns } from "@/server/db/schema";
+import { appendMessage, findConversation, pageMessages } from "@/server/conversations/repository";
 import { serializeConversation } from "@/server/conversations/serialize";
 import { claimConversation, recoverAbandonedTurns } from "@/server/conversations/use-cases";
 import { ANA, RAFAEL, resetDatabase, sessionUser } from "../support/db";
 
 let counter = 0;
+
+/** Stores `count` more employee messages, as if they had been sent earlier. */
+async function fillSession(conversationId: string, employeeId: string, count: number) {
+  for (let index = 0; index < count; index += 1) {
+    await appendMessage(db(), {
+      conversationId,
+      kind: "employee",
+      senderId: employeeId,
+      content: `mensagem ${index + 1}`,
+    });
+  }
+}
 
 async function say(user: SessionUser, text: string, conversationId: string | null = null) {
   counter += 1;
@@ -50,6 +62,23 @@ describe("agent turns (scripted model, real tools and database)", () => {
       .from(agentDecisions)
       .where(eq(agentDecisions.conversationId, result.conversationId));
     expect(decision[0]).toMatchObject({ intent: "consulta_de_chamado", source: "agent" });
+  });
+
+  it("does not ask to choose when there is nothing or only one ticket", async () => {
+    const gabriela = await sessionUser("gabriela.rocha@nexo.com.br");
+    const none = await say(gabriela, "Qual o status do meu chamado?");
+    const noneMessage = none.done && none.done.type === "done" ? none.done.message : null;
+    expect(noneMessage?.blocks.some((block) => block.type === "ticket_selection")).toBe(false);
+    expect(noneMessage?.content).toContain("não tem chamados abertos");
+
+    const bruno = await sessionUser("bruno.tavares@nexo.com.br");
+    const one = await say(bruno, "Qual o status do meu chamado?");
+    const oneMessage = one.done && one.done.type === "done" ? one.done.message : null;
+    expect(oneMessage?.blocks.some((block) => block.type === "ticket_selection")).toBe(false);
+    const card = oneMessage?.blocks.find((block) => block.type === "ticket_card");
+    expect(card && card.type === "ticket_card" ? card.ticket.number : null).toBe("INC-20501");
+    const conversation = await findConversation(db(), one.conversationId);
+    expect(conversation?.focusTicketId).not.toBeNull();
   });
 
   it("detects the overdue SLA from stored timestamps", async () => {
@@ -101,18 +130,34 @@ describe("agent turns (scripted model, real tools and database)", () => {
     expect((await findConversation(db(), opened.conversationId))?.state).toBe("analyst_active");
   });
 
-  it("enforces the per-session message limit on the server", async () => {
+  it("enforces the 30-message session limit on the server", async () => {
     const ana = await sessionUser(ANA);
     const first = await say(ana, "Qual o status do meu chamado?");
-    await db()
-      .update(conversations)
-      .set({ agentTurnCount: 30 })
-      .where(eq(conversations.id, first.conversationId));
+    await fillSession(first.conversationId, ana.id, 29);
     await expect(
       submitEmployeeMessage(ana, {
         conversationId: first.conversationId,
         clientId: "client-limit-1",
         text: "mais uma",
+      }),
+    ).rejects.toMatchObject({ code: "limit_reached" });
+    const stored = await findConversation(db(), first.conversationId);
+    if (!stored) throw new Error("conversation missing");
+    expect(await serializeConversation(db(), stored, 30)).toMatchObject({
+      sessionMessageCount: 30,
+      sessionMessageLimit: 30,
+    });
+  });
+
+  it("counts messages to the analyst too, as the PRD limit is per session", async () => {
+    const ana = await sessionUser(ANA);
+    const handoff = await say(ana, "Quero falar com um analista.");
+    await fillSession(handoff.conversationId, ana.id, 29);
+    await expect(
+      submitEmployeeMessage(ana, {
+        conversationId: handoff.conversationId,
+        clientId: "client-limit-human",
+        text: "Alguém aí?",
       }),
     ).rejects.toMatchObject({ code: "limit_reached" });
   });
