@@ -141,11 +141,12 @@ export function LoginForm() {
           type="submit"
           size="lg"
           loading={loading}
-          className="mt-7 h-[52px] w-full rounded-lg text-base"
+          className="mt-7 h-[52px] w-full rounded-lg text-base shadow-[0_8px_20px_-6px_rgba(0,98,196,0.45)] hover:shadow-[0_10px_24px_-6px_rgba(0,98,196,0.5)]"
         >
           {loading ? "Entrando…" : "Entrar"}
           {!loading ? <ArrowRight className="size-[18px]" aria-hidden="true" /> : null}
         </Button>
+        <hr className="border-rule mt-9" />
       </form>
 
       <Dialog
