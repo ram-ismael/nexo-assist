@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, db } from "@/server/db/client";
-import { conversations, tickets } from "@/server/db/schema";
+import { agentTurns, conversations, handoffs, tickets } from "@/server/db/schema";
 import {
   appendMessage,
   findConversation,
@@ -268,6 +268,32 @@ describe("conversation lifecycle", () => {
     await touchEmployeePresence(carla.id, conversation.id);
     [item] = await listQueue(db(), rafael.id, { filter: "for_you", query: "" });
     expect(item?.employeeOnline).toBe(false);
+  });
+
+  it("orders waiting conversations by the nearest contact deadline and flags real states", async () => {
+    const ana = await sessionUser(ANA);
+    const carla = await sessionUser(CARLA);
+    const rafael = await sessionUser(RAFAEL);
+    const anaLive = await getOrCreateLiveConversation(db(), ana.id);
+    await employeeRequestsAnalyst(ana, anaLive.id);
+    const carlaLive = await getOrCreateLiveConversation(db(), carla.id);
+    await employeeRequestsAnalyst(carla, carlaLive.id);
+    // Carla's deadline is the most urgent even though Ana wrote last.
+    await db()
+      .update(handoffs)
+      .set({ respondBy: new Date(Date.now() - 10 * 60_000), reason: "critical" })
+      .where(eq(handoffs.conversationId, carlaLive.id));
+    const waiting = await listQueue(db(), rafael.id, { filter: "for_you", query: "" });
+    expect(waiting.map((item) => item.id)).toEqual([carlaLive.id, anaLive.id]);
+    expect(waiting[0]?.critical).toBe(true);
+    expect(waiting[1]?.critical).toBe(false);
+
+    await returnToAgent(rafael, anaLive.id);
+    await db()
+      .insert(agentTurns)
+      .values({ conversationId: anaLive.id, userMessageSeq: 1, model: "x" });
+    const [withAgent] = await listQueue(db(), rafael.id, { filter: "with_agent", query: "" });
+    expect(withAgent).toMatchObject({ id: anaLive.id, agentBusy: true, hadHandoff: true });
   });
 
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {

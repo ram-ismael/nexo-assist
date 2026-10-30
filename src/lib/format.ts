@@ -57,6 +57,8 @@ export function dayLabel(iso: string, timeZone: string, now = new Date()): strin
   if (isSameDay(iso, today, timeZone)) return "Hoje";
   const yesterday = new Date(now.getTime() - 86_400_000).toISOString();
   if (isSameDay(iso, yesterday, timeZone)) return "Ontem";
+  const tomorrow = new Date(now.getTime() + 86_400_000).toISOString();
+  if (isSameDay(iso, tomorrow, timeZone)) return "Amanhã";
   return formatDay(iso, timeZone);
 }
 
@@ -83,7 +85,30 @@ export function relativeAge(iso: string, now = new Date()): string {
 export function untilLabel(iso: string, timeZone: string, now = new Date()): string {
   const label = dayLabel(iso, timeZone, now);
   const time = formatTime(iso, timeZone);
-  return label === "Hoje" ? time : `${label}, ${time}`;
+  if (label === "Hoje") return time;
+  // Used mid-sentence ("resposta até amanhã, 12:00"): relative words in lowercase.
+  return `${label === "Ontem" || label === "Amanhã" ? label.toLowerCase() : label}, ${time}`;
+}
+
+/**
+ * Countdown to a first-contact deadline, as the analyst reads it in the queue:
+ * "contato em 25 min", "contato em 3 h", "contato até seg., 14:00" beyond a
+ * day, and "contato atrasado há 10 min" once it has passed.
+ */
+export function contactLabel(iso: string, timeZone: string, now = new Date()): string {
+  const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60_000);
+  if (minutes < 0) {
+    const late = -minutes;
+    return late < 60
+      ? `contato atrasado há ${late} min`
+      : late < 24 * 60
+        ? `contato atrasado há ${Math.round(late / 60)} h`
+        : `contato atrasado desde ${untilLabel(iso, timeZone, now)}`;
+  }
+  if (minutes < 1) return "contato agora";
+  if (minutes < 60) return `contato em ${minutes} min`;
+  if (minutes < 24 * 60) return `contato em ${Math.round(minutes / 60)} h`;
+  return `contato até ${untilLabel(iso, timeZone, now)}`;
 }
 
 export function initials(name: string): string {

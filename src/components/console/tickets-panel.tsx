@@ -4,6 +4,7 @@ import { ArrowLeftRight, ArrowUpRight, ChevronRight, Headset, X } from "lucide-r
 import { useState } from "react";
 import { isOpenStatus, PRIORITY_LABEL, STATUS_LABEL } from "@/domain/tickets";
 import type { ConversationDetailDTO, TicketListItemDTO } from "@/lib/api-types";
+import { cn } from "@/lib/cn";
 import { formatDay, formatTime } from "@/lib/format";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/spinner";
@@ -63,6 +64,7 @@ export function TicketsPanel({
 }) {
   const [opened, setOpened] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const firstName = employeeName.split(" ")[0] ?? employeeName;
   const openCount = tickets?.filter((ticket) => isOpenStatus(ticket.status)).length ?? 0;
   const closedCount = (tickets?.length ?? 0) - openCount;
@@ -79,7 +81,9 @@ export function TicketsPanel({
         <div>
           <h2 className="text-[19px] font-semibold">Chamados de {firstName}</h2>
           <p className="text-ink-3 text-[14px]">
-            {tickets ? `${openCount} abertos · ${closedCount} encerrados` : "Carregando…"}
+            {tickets
+              ? `${openCount} ${openCount === 1 ? "aberto" : "abertos"} · ${closedCount} ${closedCount === 1 ? "encerrado" : "encerrados"}`
+              : "Carregando…"}
           </p>
         </div>
         {onClose ? (
@@ -135,9 +139,24 @@ export function TicketsPanel({
                   </span>
                 </p>
                 <p className="text-ink-3 mt-2 text-[13px]">Motivo: {handoff.reason}</p>
-                <p className="text-ink-2 mt-1 text-[14px] leading-relaxed whitespace-pre-wrap">
+                <p
+                  className={cn(
+                    "text-ink-2 mt-1 text-[14px] leading-relaxed whitespace-pre-wrap",
+                    !summaryOpen && "line-clamp-4",
+                  )}
+                >
                   {handoff.summary}
                 </p>
+                {handoff.summary.length > 220 ? (
+                  <button
+                    type="button"
+                    onClick={() => setSummaryOpen((value) => !value)}
+                    aria-expanded={summaryOpen}
+                    className="text-primary-text mt-1 text-[13px] font-medium hover:underline"
+                  >
+                    {summaryOpen ? "Mostrar menos" : "Ver resumo completo"}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

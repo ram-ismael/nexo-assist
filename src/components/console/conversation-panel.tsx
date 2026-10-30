@@ -16,7 +16,7 @@ import { STATE_LABEL } from "@/domain/conversations";
 import type { ConversationDetailDTO, MessageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, errorMessage, newClientId } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { untilLabel } from "@/lib/format";
+import { contactLabel } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -37,6 +37,7 @@ export function ConversationPanel({
   onChanged,
   onBack,
   onShowTickets,
+  ticketsDocked,
 }: {
   feed: Feed;
   detail: ConversationDetailDTO | undefined;
@@ -45,6 +46,8 @@ export function ConversationPanel({
   onChanged: (action?: "claim" | "return" | "close") => void;
   onBack: () => void;
   onShowTickets: () => void;
+  /** The tickets panel is docked on wide screens, so the toggle is not needed there. */
+  ticketsDocked: boolean;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<"claim" | "return" | "close" | null>(null);
@@ -215,7 +218,7 @@ export function ConversationPanel({
           type="button"
           onClick={onShowTickets}
           aria-label="Chamados do funcionário"
-          className="text-ink-2 hover:bg-desk rounded-full p-2 2xl:hidden"
+          className={cn("text-ink-2 hover:bg-desk rounded-full p-2", ticketsDocked && "2xl:hidden")}
         >
           <PanelRight className="size-5" />
         </button>
@@ -327,7 +330,7 @@ export function ConversationPanel({
                   </p>
                   <p className="text-ink-3 text-[14px]">
                     {state === "waiting_analyst"
-                      ? `Agent pausado${handoff?.respondBy ? ` · até ${untilLabel(handoff.respondBy, timeZone)}` : ""}`
+                      ? `Agent pausado${handoff?.respondBy ? ` · ${contactLabel(handoff.respondBy, timeZone)}` : ""}`
                       : "Assuma se precisar intervir; o agent é pausado na hora."}
                   </p>
                 </div>

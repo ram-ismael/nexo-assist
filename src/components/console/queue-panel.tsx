@@ -3,7 +3,8 @@
 import { CheckCheck, Search, WifiOff } from "lucide-react";
 import type { QueueItemDTO, QueueResponseDTO } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
-import { formatListTime, untilLabel } from "@/lib/format";
+import { useEffect, useState, type ReactNode } from "react";
+import { contactLabel, formatListTime } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/spinner";
@@ -18,51 +19,112 @@ const FILTERS: { id: QueueFilter; label: string }[] = [
   { id: "mine", label: "Minhas" },
 ];
 
+/** One line that says what this conversation needs, from stored state only. */
 function StatusLine({
   item,
   analystId,
   timeZone,
+  now,
 }: {
   item: QueueItemDTO;
   analystId: string;
   timeZone: string;
+  now: Date;
 }) {
+  const firstName = item.employee.name.split(" ")[0];
+
   if (item.state === "waiting_analyst") {
+    const handoff = item.handoff;
+    const overdue = !!handoff?.respondBy && new Date(handoff.respondBy) < now;
     return (
-      <span className="text-danger-text inline-flex items-center gap-1.5">
-        <Dot className="bg-danger" />
-        Transferida
-        {item.handoff?.ticketNumber ? ` · ${item.handoff.ticketNumber}` : ""}
-        {item.handoff?.respondBy ? ` · até ${untilLabel(item.handoff.respondBy, timeZone)}` : ""}
-      </span>
+      <Line
+        dot={cn("bg-danger", overdue && "animate-pulse")}
+        tone="text-danger-text"
+        title={
+          handoff ? [handoff.reason, handoff.ticketNumber].filter(Boolean).join(" · ") : undefined
+        }
+      >
+        {item.critical ? <strong className="font-semibold">Crítico</strong> : "Transferida"}
+        {handoff?.respondBy ? (
+          <>
+            {" · "}
+            <span className={overdue ? "font-semibold" : undefined}>
+              {contactLabel(handoff.respondBy, timeZone, now)}
+            </span>
+          </>
+        ) : null}
+      </Line>
     );
   }
+
   if (item.state === "analyst_active") {
     const mine = item.assignedAnalyst?.id === analystId;
+    if (!mine) {
+      return (
+        <Line dot="bg-primary" tone="text-ink-3">
+          {item.assignedAnalyst?.name ?? "Analista"} atendendo
+        </Line>
+      );
+    }
+    // Whose turn it is: the last message tells it.
+    const waitingForMe = item.lastMessageKind === "employee";
     return (
-      <span className="text-primary-text inline-flex items-center gap-1.5">
-        <Dot className="bg-primary" />
-        {mine ? "Você está atendendo" : `${item.assignedAnalyst?.name ?? "Analista"} atendendo`}
-      </span>
+      <Line dot="bg-primary" tone="text-primary-text">
+        Você está atendendo
+        {waitingForMe ? (
+          <span className="font-semibold"> · aguarda sua resposta</span>
+        ) : item.lastMessageKind === "analyst" ? (
+          <span className="text-ink-3"> · aguardando {firstName}</span>
+        ) : null}
+      </Line>
     );
   }
+
   if (item.state === "agent_active") {
+    if (item.agentBusy) {
+      return (
+        <Line dot="bg-success animate-pulse" tone="text-success-text">
+          Agent respondendo…
+        </Line>
+      );
+    }
     return item.lowCertainty ? (
-      <span className="text-warning-text inline-flex items-center gap-1.5">
-        <Dot className="bg-warning" />
+      <Line dot="bg-warning" tone="text-warning-text">
         Agent com segurança baixa
-      </span>
+      </Line>
     ) : (
-      <span className="text-ink-3 inline-flex items-center gap-1.5">
-        <Dot className="bg-success" />
+      <Line dot="bg-success" tone="text-ink-3">
         Agent atendendo
-      </span>
+      </Line>
     );
   }
+
   return (
-    <span className="text-ink-3 inline-flex items-center gap-1.5">
-      <Dot className="bg-ink-4" />
-      Encerrada
+    <Line dot="bg-ink-4" tone="text-ink-3">
+      {item.assignedAnalyst
+        ? `Encerrada por ${item.assignedAnalyst.name.split(" ")[0]}`
+        : item.hadHandoff
+          ? "Encerrada"
+          : "Atendida só pelo agent"}
+    </Line>
+  );
+}
+
+function Line({
+  dot,
+  tone,
+  title,
+  children,
+}: {
+  dot: string;
+  tone: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1.5", tone)} title={title}>
+      <Dot className={cn("shrink-0", dot)} />
+      <span className="truncate">{children}</span>
     </span>
   );
 }
@@ -98,6 +160,13 @@ export function QueuePanel({
   available: boolean;
   onToggleAvailable: () => void;
 }) {
+  // Countdowns ("contato em 25 min") advance even when the queue data does not change.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <section aria-label="Conversas" className="bg-paper flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between px-5 pt-5">
@@ -252,7 +321,7 @@ export function QueuePanel({
                       ) : null}
                     </span>
                     <span className="mt-1 block text-[13px]">
-                      <StatusLine item={item} analystId={analystId} timeZone={timeZone} />
+                      <StatusLine item={item} analystId={analystId} timeZone={timeZone} now={now} />
                     </span>
                   </span>
                 </button>

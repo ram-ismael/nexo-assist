@@ -154,6 +154,12 @@ export type QueueItemDTO = {
   lowCertainty: boolean;
   employeeTyping: boolean;
   employeeOnline: boolean;
+  /** The agent is answering right now (a turn is running). */
+  agentBusy: boolean;
+  /** Waiting or assumed because of a critical case. */
+  critical: boolean;
+  /** Ever went to a person; a closed conversation without it was handled by the agent alone. */
+  hadHandoff: boolean;
 };
 
 export type ApiError = {

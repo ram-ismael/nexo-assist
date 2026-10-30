@@ -3,6 +3,7 @@ import type { QueueItemDTO } from "@/lib/api-types";
 import type { Executor } from "@/server/db/client";
 import {
   agentDecisions,
+  agentTurns,
   conversations,
   handoffs,
   messages,
@@ -10,6 +11,7 @@ import {
   users,
 } from "@/server/db/schema";
 import { HANDOFF_REASON_LABEL } from "./handoff";
+import { ABANDONED_TURN_MS } from "./repository";
 import { employeeOnline, employeeTyping } from "./serialize";
 
 export const QUEUE_FILTERS = ["all", "for_you", "with_agent", "mine"] as const;
@@ -76,6 +78,13 @@ export async function listQueue(
     .where(and(...conditions))
     .orderBy(
       sql`case ${conversations.state} when 'waiting_analyst' then 0 when 'analyst_active' then 1 when 'agent_active' then 2 else 3 end`,
+      // Waiting conversations by urgency: the nearest (or most overdue)
+      // first-contact deadline first, not by who wrote last.
+      sql`case when ${conversations.state} = 'waiting_analyst' then (
+        select h.respond_by from ${handoffs} h
+        where h.conversation_id = ${conversations.id}
+        order by h.created_at desc limit 1
+      ) end asc nulls last`,
       desc(conversations.lastActivityAt),
     )
     .limit(options.limit ?? 50);
@@ -87,7 +96,7 @@ export async function listQueue(
       rows.map((row) => row.conversation.assignedAnalystId).filter((id): id is string => !!id),
     ),
   ];
-  const [unreadRows, handoffRows, analystRows, lowRows] = await Promise.all([
+  const [unreadRows, handoffRows, analystRows, lowRows, busyRows] = await Promise.all([
     executor
       .select({ conversationId: messages.conversationId, count: sql<number>`count(*)::int` })
       .from(messages)
@@ -125,7 +134,18 @@ export async function listQueue(
       .from(agentDecisions)
       .where(inArray(agentDecisions.conversationId, ids))
       .orderBy(agentDecisions.conversationId, desc(agentDecisions.createdAt)),
+    executor
+      .select({ conversationId: agentTurns.conversationId })
+      .from(agentTurns)
+      .where(
+        and(
+          inArray(agentTurns.conversationId, ids),
+          eq(agentTurns.status, "running"),
+          gt(agentTurns.startedAt, new Date(Date.now() - ABANDONED_TURN_MS)),
+        ),
+      ),
   ]);
+  const busy = new Set(busyRows.map((row) => row.conversationId));
   const ticketIds = [...new Set(handoffRows.flatMap((row) => row.ticketIds))];
   const ticketRows =
     ticketIds.length > 0
@@ -172,6 +192,9 @@ export async function listQueue(
       lowCertainty:
         conversation.state === "agent_active" && certainty.get(conversation.id) === "baixa",
       employeeTyping: employeeTyping(conversation),
+      agentBusy: conversation.state === "agent_active" && busy.has(conversation.id),
+      critical: !!handoff && showHandoff && handoff.reason === "critical",
+      hadHandoff: !!handoff,
       employeeOnline: employeeOnline(conversation.employeeSeenAt),
     };
   });

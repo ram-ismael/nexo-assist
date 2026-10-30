@@ -10,7 +10,7 @@ import {
 import { LogOut, MessageCircle } from "lucide-react";
 import { Dialog as RadixDialog, DropdownMenu } from "radix-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ConversationDetailDTO, QueueResponseDTO, TicketListItemDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -22,6 +22,40 @@ import { ConversationPanel } from "./conversation-panel";
 import { QueuePanel, type QueueFilter } from "./queue-panel";
 import { TicketsPanel } from "./tickets-panel";
 import { useFeed } from "./use-feed";
+
+const DOCK_KEY = "nexo-console-tickets-panel";
+const DOCK_EVENT = "nexo:tickets-panel";
+
+// Last choice in this page, so hiding works even where storage is blocked.
+let dockChoice: boolean | null = null;
+
+function readDock(): boolean {
+  if (dockChoice !== null) return dockChoice;
+  try {
+    return window.localStorage.getItem(DOCK_KEY) !== "hidden";
+  } catch {
+    return true; // Storage blocked: the panel stays docked.
+  }
+}
+
+function writeDock(docked: boolean): void {
+  dockChoice = docked;
+  try {
+    window.localStorage.setItem(DOCK_KEY, docked ? "docked" : "hidden");
+  } catch {
+    // Not remembered; the event below still applies it to this page.
+  }
+  window.dispatchEvent(new Event(DOCK_EVENT));
+}
+
+function subscribeDock(onChange: () => void): () => void {
+  window.addEventListener(DOCK_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(DOCK_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
 
 type Analyst = { id: string; name: string; supportLevel: string | null };
 
@@ -62,6 +96,14 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query, 300);
   const [ticketsOpen, setTicketsOpen] = useState(false);
+  // Wide screens dock the tickets panel; the analyst may hide it for more chat
+  // width. A per-browser convenience kept in local storage (never authoritative).
+  const docked = useSyncExternalStore(subscribeDock, readDock, () => true);
+  const dock = (value: boolean) => writeDock(value);
+  const showTickets = () => {
+    if (window.matchMedia("(min-width: 1536px)").matches) dock(true);
+    else setTicketsOpen(true);
+  };
 
   const queue = useQuery({
     queryKey: ["queue", filter, debouncedQuery],
@@ -221,7 +263,8 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
             timeZone={timeZone}
             onChanged={refreshAll}
             onBack={() => select(null)}
-            onShowTickets={() => setTicketsOpen(true)}
+            onShowTickets={showTickets}
+            ticketsDocked={docked}
           />
         ) : (
           <div className="bg-chat text-ink-3 flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
@@ -235,13 +278,19 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
 
       {selectedId && detail.data ? (
         <>
-          <div className="border-rule hidden w-[400px] shrink-0 border-l 2xl:block">
+          <div
+            className={cn(
+              "border-rule hidden w-[400px] shrink-0 border-l",
+              docked && "animate-slide-in 2xl:block",
+            )}
+          >
             <TicketsPanel
               employeeName={detail.data.conversation.employee.name}
               tickets={tickets.data?.items}
               loading={tickets.isLoading}
               detail={detail.data}
               timeZone={timeZone}
+              onClose={() => dock(false)}
               onTicketUpdated={refreshAll}
             />
           </div>
