@@ -202,8 +202,8 @@ pnpm verify            # formatação, lint, tipos, testes e build
 ```
 
 - **Unitários (38)**: limites do SLA (fim de semana, antes/depois do expediente, horário de fechamento, feriado, crítico 24h), prioridade, duplicidade, janela de reabertura, máquina de estados, componentes e formatação de datas.
-- **Integração (26)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, retry e indisponibilidade do serviço de chamados.
-- **E2E (10)**: login e sessão, perfil, isolamento via API, CSRF, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, e layouts de celular.
+- **Integração (27)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, limite por minuto, retry e indisponibilidade do serviço de chamados.
+- **E2E (11)**: login e sessão, perfil, isolamento via API, CSRF, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
 - **Avaliação do agent**: `tests/eval/agent-eval.test.ts` cobre os 15 cenários do PRD (VPN no Windows 10 e 11, duplicado, reabertura dentro e fora dos 7 dias, reunião no mesmo dia, queda geral, pedido de monitor, status sem número, prazo vencido, pedido de analista, mensagem vaga, assunto de RH, sistema fora do ar, chamado de outra pessoa). Verifica ferramentas usadas, rascunhos e estado final, nunca o texto exato.
 
 O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como passo manual. Resultados atuais em [docs/testing.md](docs/testing.md).

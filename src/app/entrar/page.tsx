@@ -22,7 +22,7 @@ export default async function LoginPage({
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.25fr_1fr]">
       <section className="bg-navy relative flex flex-col px-6 py-8 text-white sm:px-12 lg:px-16 lg:py-[52px] xl:px-[88px]">
-        <Logo tone="light" className="h-[26px]" />
+        <Logo tone="light" className="h-[30px] self-start" />
         <LoginShowcase metrics={metrics} />
       </section>
 

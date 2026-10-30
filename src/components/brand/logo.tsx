@@ -1,11 +1,7 @@
 import Image from "next/image";
 import { cn } from "@/lib/cn";
 
-/**
- * Official brand asset supplied with the challenge; never redrawn. The light
- * version is the same file whitened with a CSS filter, which keeps the exact
- * shapes (the supplied white PNG carries padding that distorts at small sizes).
- */
+/** Official brand assets supplied with the challenge; never redrawn. */
 export function Logo({
   tone = "dark",
   className,
@@ -15,12 +11,12 @@ export function Logo({
 }) {
   return (
     <Image
-      src="/brand/logo-dark.png"
+      src={tone === "light" ? "/brand/logo-white.png" : "/brand/logo-dark.png"}
       alt="Nexo Assist"
-      width={408}
-      height={60}
+      width={tone === "light" ? 390 : 408}
+      height={tone === "light" ? 72 : 60}
       priority
-      className={cn("h-7 w-auto", tone === "light" && "brightness-0 invert", className)}
+      className={cn("h-7 w-auto", className)}
     />
   );
 }

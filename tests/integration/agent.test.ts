@@ -4,7 +4,7 @@ import { resetConfigForTests } from "@/lib/config";
 import { runAgentTurn, submitEmployeeMessage, type StreamEvent } from "@/server/agent/turn";
 import type { SessionUser } from "@/server/auth/sessions";
 import { closeDb, db } from "@/server/db/client";
-import { agentActions, agentDecisions, conversations } from "@/server/db/schema";
+import { agentActions, agentDecisions, agentTurns, conversations } from "@/server/db/schema";
 import { findConversation } from "@/server/conversations/repository";
 import { claimConversation } from "@/server/conversations/use-cases";
 import { ANA, RAFAEL, resetDatabase, sessionUser } from "../support/db";
@@ -142,6 +142,36 @@ describe("agent turns (scripted model, real tools and database)", () => {
       expect(notice?.kind).toBe("system");
     } finally {
       process.env.NEXO_SCRIPTED_MODEL = "true";
+      resetConfigForTests();
+    }
+  });
+});
+
+describe("abuse controls", () => {
+  beforeEach(resetDatabase);
+  afterAll(closeDb);
+
+  it("stops model calls once the per-minute limit is reached", async () => {
+    process.env.RATE_LIMIT_TURNS_PER_MINUTE = "2";
+    resetConfigForTests();
+    try {
+      const ana = await sessionUser(ANA);
+      const first = await say(ana, "Qual o status do meu chamado?");
+      await say(ana, "INC-20311", first.conversationId);
+      await expect(
+        submitEmployeeMessage(ana, {
+          conversationId: first.conversationId,
+          clientId: "client-burst-3",
+          text: "mais uma",
+        }),
+      ).rejects.toMatchObject({ code: "rate_limited" });
+      const turns = await db()
+        .select()
+        .from(agentTurns)
+        .where(eq(agentTurns.conversationId, first.conversationId));
+      expect(turns).toHaveLength(2);
+    } finally {
+      process.env.RATE_LIMIT_TURNS_PER_MINUTE = "1000";
       resetConfigForTests();
     }
   });
