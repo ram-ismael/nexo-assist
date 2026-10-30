@@ -1,10 +1,11 @@
 "use client";
 
-import { CheckCheck, Search } from "lucide-react";
+import { CheckCheck, Search, WifiOff } from "lucide-react";
 import type { QueueItemDTO, QueueResponseDTO } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 import { formatListTime, untilLabel } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/spinner";
 import { Dot } from "@/components/ui/status";
 
@@ -70,6 +71,7 @@ export function QueuePanel({
   data,
   loading,
   error,
+  onRetry,
   filter,
   onFilter,
   query,
@@ -84,6 +86,7 @@ export function QueuePanel({
   data: QueueResponseDTO | undefined;
   loading: boolean;
   error: string | null;
+  onRetry: () => void;
   filter: QueueFilter;
   onFilter: (filter: QueueFilter) => void;
   query: string;
@@ -123,7 +126,7 @@ export function QueuePanel({
             className="placeholder:text-ink-3 h-full flex-1 bg-transparent text-[15px] outline-none"
           />
         </label>
-        <div role="tablist" aria-label="Filtros" className="mt-3 flex flex-wrap gap-1.5">
+        <div role="group" aria-label="Filtrar conversas" className="mt-3 flex flex-wrap gap-1.5">
           {FILTERS.map((item) => {
             const active = filter === item.id;
             const count = data?.counts[item.id];
@@ -131,8 +134,7 @@ export function QueuePanel({
               <button
                 key={item.id}
                 type="button"
-                role="tab"
-                aria-selected={active}
+                aria-pressed={active}
                 onClick={() => onFilter(item.id)}
                 className={cn(
                   "h-8 rounded-full px-2.5 text-[14px] whitespace-nowrap transition-colors",
@@ -164,7 +166,23 @@ export function QueuePanel({
             ))}
           </div>
         ) : null}
-        {error ? <p className="text-danger-text px-3 py-2 text-sm">{error}</p> : null}
+        {error && data ? (
+          // Keep working with the last known queue; say it may be outdated.
+          <p
+            role="status"
+            className="bg-warning-soft text-warning-text mx-2 mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-[13px]"
+          >
+            <WifiOff className="size-4 shrink-0" aria-hidden="true" />
+            Sem atualização no momento. Mostrando o último estado da fila; tentando de novo.
+          </p>
+        ) : error ? (
+          <div role="alert" className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+            <p className="text-danger-text text-[14px]">{error}</p>
+            <Button size="sm" variant="secondary" onClick={onRetry}>
+              Tentar de novo
+            </Button>
+          </div>
+        ) : null}
         {data && data.items.length === 0 ? (
           <p className="text-ink-3 px-4 py-10 text-center text-[14px]">
             {query
@@ -185,11 +203,11 @@ export function QueuePanel({
                   onClick={() => onSelect(item.id)}
                   aria-current={selected ? "true" : undefined}
                   className={cn(
-                    "flex w-full gap-3 rounded-xl px-3 py-3.5 text-left transition-colors",
+                    "flex w-full gap-3 rounded-xl px-3 py-3.5 text-left transition-colors duration-150",
                     selected ? "bg-desk" : "hover:bg-desk/70",
                   )}
                 >
-                  <Avatar name={item.employee.name} online={item.state !== "closed"} />
+                  <Avatar name={item.employee.name} />
                   <span className="border-rule min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="text-ink truncate text-[16px] font-medium">

@@ -16,7 +16,7 @@ test("employee chat works on a phone without horizontal scroll", async ({ page }
 test("analyst console is navigable on a phone", async ({ page }) => {
   await login(page, "marina.costa@nexo.com.br");
   await expect(page.getByRole("heading", { name: "Conversas" })).toBeVisible();
-  await page.getByRole("tab", { name: /Todas/ }).click();
+  await page.getByRole("button", { name: /Todas/ }).click();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );

@@ -8,7 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { LogOut, MessageCircle } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { Dialog as RadixDialog, DropdownMenu } from "radix-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ConversationDetailDTO, QueueResponseDTO, TicketListItemDTO } from "@/lib/api-types";
@@ -188,6 +188,7 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
           data={queue.data}
           loading={queue.isLoading}
           error={queue.error ? errorMessage(queue.error) : null}
+          onRetry={() => void queue.refetch()}
           filter={filter}
           onFilter={setFilter}
           query={query}
@@ -235,20 +236,17 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
               onTicketUpdated={refreshAll}
             />
           </div>
-          {ticketsOpen ? (
-            <div
-              className="fixed inset-0 z-40 2xl:hidden"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Chamados do funcionário"
-            >
-              <button
-                type="button"
-                aria-label="Fechar"
-                className="bg-navy/40 animate-fade absolute inset-0"
-                onClick={() => setTicketsOpen(false)}
-              />
-              <div className="animate-fade absolute top-0 right-0 h-full w-full max-w-[420px] shadow-xl">
+          {/* Narrow screens: the same panel as a drawer, with focus trap, Esc and focus return. */}
+          <RadixDialog.Root open={ticketsOpen} onOpenChange={setTicketsOpen}>
+            <RadixDialog.Portal>
+              <RadixDialog.Overlay className="bg-navy/40 animate-fade fixed inset-0 z-40 2xl:hidden" />
+              <RadixDialog.Content
+                aria-describedby={undefined}
+                className="animate-slide-in fixed top-0 right-0 z-50 h-dvh w-full max-w-[420px] shadow-xl focus:outline-none 2xl:hidden"
+              >
+                <RadixDialog.Title className="sr-only">
+                  Chamados de {detail.data.conversation.employee.name}
+                </RadixDialog.Title>
                 <TicketsPanel
                   employeeName={detail.data.conversation.employee.name}
                   tickets={tickets.data?.items}
@@ -258,9 +256,9 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
                   onClose={() => setTicketsOpen(false)}
                   onTicketUpdated={refreshAll}
                 />
-              </div>
-            </div>
-          ) : null}
+              </RadixDialog.Content>
+            </RadixDialog.Portal>
+          </RadixDialog.Root>
         </>
       ) : null}
     </div>

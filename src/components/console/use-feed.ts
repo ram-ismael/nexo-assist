@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
-import { api, errorMessage } from "@/lib/api-client";
+import { api, ApiRequestError, errorMessage } from "@/lib/api-client";
 import { mergeMessages } from "@/components/chat/use-chat";
 
 const POLL_MS = 3000;
@@ -20,6 +20,8 @@ export function useFeed(conversationId: string) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [olderError, setOlderError] = useState<string | null>(null);
+  /** False while incremental sync is failing; the panel says the view may be stale. */
+  const [connected, setConnected] = useState(true);
   const messagesRef = useRef<MessageDTO[]>([]);
 
   useLayoutEffect(() => {
@@ -50,8 +52,13 @@ export function useFeed(conversationId: string) {
       );
       setConversation(page.conversation);
       setMessages((list) => mergeMessages(list, page.messages));
-    } catch {
-      // The next tick retries; the queue keeps showing the last known state.
+      setConnected(true);
+    } catch (reason) {
+      // Network or server trouble: keep the last known state and retry on the
+      // next tick. A rejected request (e.g. 404) is not a connection problem.
+      if (!(reason instanceof ApiRequestError) || reason.status === 0 || reason.status >= 500) {
+        setConnected(false);
+      }
     }
   }, [conversationId]);
 
@@ -59,7 +66,18 @@ export function useFeed(conversationId: string) {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void sync();
     }, POLL_MS);
-    return () => clearInterval(timer);
+    // Catch up at once when the tab comes back or the network returns.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void sync();
+    };
+    const onOnline = () => void sync();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
   }, [sync]);
 
   const loadOlder = useCallback(async () => {
@@ -93,6 +111,7 @@ export function useFeed(conversationId: string) {
     loadingOlder,
     error,
     olderError,
+    connected,
     loadOlder,
     sync,
     add,

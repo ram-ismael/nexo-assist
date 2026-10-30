@@ -1,10 +1,20 @@
 "use client";
 
-import { ArrowLeft, Bot, CircleCheck, Hand, Headset, PanelRight, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  Bot,
+  CircleCheck,
+  Hand,
+  Headset,
+  PanelRight,
+  Search,
+  WifiOff,
+  X,
+} from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { STATE_LABEL } from "@/domain/conversations";
 import type { ConversationDetailDTO, MessageDTO } from "@/lib/api-types";
-import { api, errorMessage, newClientId } from "@/lib/api-client";
+import { api, ApiRequestError, errorMessage, newClientId } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { untilLabel } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
@@ -38,6 +48,10 @@ export function ConversationPanel({
   const [busy, setBusy] = useState<"claim" | "return" | "close" | null>(null);
   const [searching, setSearching] = useState(false);
   const [term, setTerm] = useState("");
+  const [outgoing, setOutgoing] = useState<string | null>(null);
+  // A reply whose fate is unknown (network dropped) is resent with the same
+  // client id, so the server stores it once even if the first try got through.
+  const unconfirmed = useRef<{ text: string; clientId: string } | null>(null);
   const conversation = feed.conversation ?? detail?.conversation ?? null;
   const state = conversation?.state;
   const mine = state === "analyst_active" && conversation?.assignedAnalyst?.id === analystId;
@@ -73,21 +87,26 @@ export function ConversationPanel({
 
   async function reply(text: string): Promise<boolean> {
     if (!conversation) return false;
+    const clientId =
+      unconfirmed.current?.text === text ? unconfirmed.current.clientId : newClientId();
+    setOutgoing(text);
     try {
       const result = await api<{ message: MessageDTO }>(
         `/api/conversations/${conversation.id}/reply`,
-        {
-          method: "POST",
-          json: { clientId: newClientId(), text },
-        },
+        { method: "POST", json: { clientId, text } },
       );
+      unconfirmed.current = null;
       feed.add(result.message);
       onChanged();
       return true;
     } catch (error) {
+      unconfirmed.current =
+        error instanceof ApiRequestError && error.status === 0 ? { text, clientId } : null;
       toast("error", errorMessage(error));
       await feed.sync();
       return false;
+    } finally {
+      setOutgoing(null);
     }
   }
 
@@ -192,6 +211,16 @@ export function ConversationPanel({
           <PanelRight className="size-5" />
         </button>
       </header>
+      {!feed.connected ? (
+        <p
+          role="status"
+          className="bg-warning-soft text-warning-text flex items-center gap-2 px-4 py-2 text-[13px] sm:px-6"
+        >
+          <WifiOff className="size-4 shrink-0" aria-hidden="true" />
+          Sem conexão com o servidor. Tentando reconectar; novas mensagens aparecem assim que
+          voltar.
+        </p>
+      ) : null}
       {searching ? (
         <div className="border-rule bg-paper flex items-center gap-2 border-b px-4 py-2 sm:px-6">
           <Search className="text-ink-3 size-4" aria-hidden="true" />
@@ -228,6 +257,7 @@ export function ConversationPanel({
         olderError={feed.olderError}
         onLoadOlder={feed.loadOlder}
         handlersFor={() => ({ onChanged: () => undefined })}
+        outgoing={outgoing}
         empty={
           <p className="text-ink-3 py-10 text-center text-[14px]">
             {term ? "Nenhuma mensagem encontrada." : "Sem mensagens ainda."}
@@ -261,6 +291,7 @@ export function ConversationPanel({
               placeholder={`Responder para ${firstName}…`}
               variant="console"
               maxLength={4000}
+              busy={outgoing !== null}
               onSend={reply}
             />
           </>

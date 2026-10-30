@@ -4,6 +4,7 @@ import { ArrowUp, Send } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 const MAX_LENGTH = 2000;
 
@@ -120,10 +121,11 @@ export function Composer({
             type="button"
             onClick={submit}
             disabled={disabled || !value.trim() || tooLong || busy}
-            aria-label="Enviar mensagem"
-            className="bg-cta hover:bg-cta-hover flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-colors disabled:opacity-50"
+            aria-label={busy ? "Enviando mensagem" : "Enviar mensagem"}
+            aria-busy={busy || undefined}
+            className="bg-cta hover:bg-cta-hover flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-[background-color,transform,opacity] duration-150 active:scale-95 disabled:opacity-50"
           >
-            <Send className="size-5" aria-hidden="true" />
+            {busy ? <Spinner className="size-5" /> : <Send className="size-5" aria-hidden="true" />}
           </button>
         )}
       </div>

@@ -61,6 +61,9 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
   const [syncError, setSyncError] = useState(false);
   const [assistant, setAssistant] = useState<AssistantStatus>(initialAssistant);
   const streaming = useRef(false);
+  // A message whose fate is unknown (network dropped before any answer) is
+  // resent with the same client id, so the server stores and answers it once.
+  const unconfirmed = useRef<{ text: string; clientId: string } | null>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const conversationRef = useRef(conversation);
@@ -179,7 +182,11 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
   const send = useCallback(
     async (text: string, options: { retryOfMessageId?: string } = {}): Promise<boolean> => {
       if (streaming.current) return false;
-      const clientId = newClientId();
+      const clientId =
+        !options.retryOfMessageId && unconfirmed.current?.text === text
+          ? unconfirmed.current.clientId
+          : newClientId();
+      unconfirmed.current = null;
       streaming.current = true;
       setFailure(null);
       setPending({
@@ -264,6 +271,9 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
         return true;
       } catch (error) {
         setPending(null);
+        if (error instanceof ApiRequestError && error.code === "offline" && text) {
+          unconfirmed.current = { text, clientId };
+        }
         const message =
           error instanceof ApiRequestError
             ? error.message

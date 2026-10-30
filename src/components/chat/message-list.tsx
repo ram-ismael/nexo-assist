@@ -64,7 +64,7 @@ function EmployeeViewMessage({
   if (message.kind === "employee") {
     return (
       <div className="flex justify-end">
-        <p className="animate-rise bg-navy max-w-[min(560px,85%)] rounded-[14px] rounded-br-md px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap text-white sm:text-[16px]">
+        <p className="bg-navy max-w-[min(560px,85%)] rounded-[14px] rounded-br-md px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap text-white sm:text-[16px]">
           {message.content}
         </p>
       </div>
@@ -94,7 +94,7 @@ function EmployeeViewMessage({
       {message.content || hasInline ? (
         <div
           className={cn(
-            "animate-rise max-w-[min(780px,100%)] rounded-[14px] border px-5 py-4 text-[15px] leading-relaxed sm:text-[16px]",
+            "max-w-[min(780px,100%)] rounded-[14px] border px-5 py-4 text-[15px] leading-relaxed sm:text-[16px]",
             isAnalyst ? "border-success/25 bg-analyst-bubble" : "border-rule bg-paper",
           )}
         >
@@ -119,7 +119,7 @@ function ConsoleViewMessage({ message, timeZone }: { message: MessageDTO; timeZo
   if (message.kind === "employee") {
     return (
       <div className="flex justify-start">
-        <p className="animate-rise bg-paper text-ink max-w-[min(520px,85%)] rounded-xl px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap shadow-[0_1px_2px_rgba(27,36,49,0.06)]">
+        <p className="bg-paper text-ink max-w-[min(520px,85%)] rounded-xl px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap shadow-[0_1px_2px_rgba(27,36,49,0.06)]">
           {message.content}
           <span className="text-ink-4 ml-3 align-bottom text-[12px]">
             {formatTime(message.createdAt, timeZone)}
@@ -150,7 +150,7 @@ function ConsoleViewMessage({ message, timeZone }: { message: MessageDTO; timeZo
       {message.content ? (
         <div
           className={cn(
-            "animate-rise max-w-[min(600px,90%)] rounded-xl px-4 py-3 text-[15px] leading-relaxed shadow-[0_1px_2px_rgba(27,36,49,0.06)]",
+            "max-w-[min(600px,90%)] rounded-xl px-4 py-3 text-[15px] leading-relaxed shadow-[0_1px_2px_rgba(27,36,49,0.06)]",
             isAnalyst ? "bg-analyst-bubble" : "bg-agent-bubble",
           )}
         >
@@ -223,6 +223,7 @@ export function MessageList({
   onLoadOlder,
   handlersFor,
   pending,
+  outgoing,
   empty,
   footer,
 }: {
@@ -236,6 +237,8 @@ export function MessageList({
   onLoadOlder: () => void;
   handlersFor: (message: MessageDTO, isLast: boolean) => BlockHandlers;
   pending?: PendingTurn | null;
+  /** Console: the analyst's reply between send and server confirmation. */
+  outgoing?: string | null;
   empty?: ReactNode;
   footer?: ReactNode;
 }) {
@@ -246,6 +249,10 @@ export function MessageList({
   const previous = useRef<{ first?: number; last?: number; count: number }>({ count: 0 });
   const [unseen, setUnseen] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
+  // Only messages that arrive while the list is open animate in; the history
+  // present at mount and older pages loaded on scroll appear in place.
+  const [animateAfter] = useState(() => lastSeq ?? 0);
+  const ownKind = viewer === "employee" ? "employee" : "analyst";
 
   const scrollToBottom = useCallback((smooth = false) => {
     const element = scroller.current;
@@ -355,20 +362,39 @@ export function MessageList({
                     {dayLabel(message.createdAt, timeZone)}
                   </p>
                 ) : null}
-                {layout === "employee" ? (
-                  <EmployeeViewMessage
-                    message={message}
-                    viewer={viewer}
-                    timeZone={timeZone}
-                    handlers={handlersFor(message, isLast)}
-                  />
-                ) : (
-                  <ConsoleViewMessage message={message} timeZone={timeZone} />
-                )}
+                {/* Own messages were already on screen as "Enviando…": no second entrance. */}
+                <div
+                  className={
+                    message.seq > animateAfter && message.kind !== ownKind
+                      ? "animate-rise"
+                      : undefined
+                  }
+                >
+                  {layout === "employee" ? (
+                    <EmployeeViewMessage
+                      message={message}
+                      viewer={viewer}
+                      timeZone={timeZone}
+                      handlers={handlersFor(message, isLast)}
+                    />
+                  ) : (
+                    <ConsoleViewMessage message={message} timeZone={timeZone} />
+                  )}
+                </div>
               </Fragment>
             );
           })}
           {pending ? <PendingReply pending={pending} /> : null}
+          {outgoing ? (
+            <div className="animate-rise flex flex-col items-end gap-1">
+              <p className="bg-analyst-bubble/70 text-ink max-w-[min(600px,90%)] rounded-xl px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
+                {outgoing}
+              </p>
+              <span className="text-ink-4 text-[12px]" role="status">
+                Enviando…
+              </span>
+            </div>
+          ) : null}
           {footer}
         </div>
       </div>

@@ -31,7 +31,7 @@ export function Dialog({
             "bg-paper fixed z-50 flex flex-col shadow-[0_20px_60px_rgba(27,36,49,0.25)] focus:outline-none",
             side === "center"
               ? "animate-rise top-1/2 left-1/2 max-h-[90dvh] w-[calc(100vw-32px)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl"
-              : "animate-fade top-0 right-0 h-dvh w-full max-w-md",
+              : "animate-slide-in top-0 right-0 h-dvh w-full max-w-md",
             className,
           )}
         >
