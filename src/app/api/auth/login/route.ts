@@ -2,7 +2,12 @@ import { cookies, headers } from "next/headers";
 import { z } from "zod";
 import { config } from "@/lib/config";
 import { homeFor } from "@/server/auth/current-user";
-import { createSession, findActiveUserByEmail, SESSION_COOKIE } from "@/server/auth/sessions";
+import {
+  createSession,
+  findActiveUserByEmail,
+  revokeSession,
+  SESSION_COOKIE,
+} from "@/server/auth/sessions";
 import { audit } from "@/server/conversations/use-cases";
 import { db } from "@/server/db/client";
 import { AppError } from "@/server/errors";
@@ -44,12 +49,15 @@ export const POST = route("public", async ({ req }) => {
       "E-mail não encontrado. Use um e-mail corporativo cadastrado.",
     );
   }
+  const jar = await cookies();
+  // A new sign-in replaces whatever session this browser held before.
+  await revokeSession(db(), jar.get(SESSION_COOKIE)?.value);
   const session = await createSession(db(), {
     userId: user.id,
     rememberMe: body.rememberMe,
     userAgent: headerList.get("user-agent"),
   });
-  (await cookies()).set(SESSION_COOKIE, session.token, {
+  jar.set(SESSION_COOKIE, session.token, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
     sameSite: "lax",
