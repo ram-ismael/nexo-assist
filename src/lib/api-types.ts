@@ -1,3 +1,4 @@
+import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationState, MessageKind } from "@/domain/conversations";
 import type {
   AffectedScope,
@@ -62,6 +63,8 @@ export type MessagePageDTO = {
   conversation: ConversationDTO;
   messages: MessageDTO[];
   hasMoreBefore: boolean;
+  /** Service-wide assistant health, refreshed by every poll. */
+  assistant: AssistantStatus;
 };
 
 export type DecisionDTO = {

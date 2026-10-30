@@ -177,23 +177,33 @@ function PendingReply({ pending }: { pending: PendingTurn }) {
   return (
     <>
       {pending.text && !pending.accepted ? (
-        <div className="flex justify-end">
-          <p className="bg-navy/80 max-w-[min(560px,85%)] rounded-[14px] rounded-br-md px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap text-white sm:text-[16px]">
+        <div className="animate-rise flex flex-col items-end gap-1">
+          <p className="bg-navy/75 max-w-[min(560px,85%)] rounded-[14px] rounded-br-md px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap text-white sm:text-[16px]">
             {pending.text}
-            <span className="sr-only"> (enviando)</span>
           </p>
+          <span className="text-ink-4 text-[12px]" role="status">
+            Enviando…
+          </span>
         </div>
       ) : null}
-      <div className="flex flex-col items-start gap-2.5" aria-live="polite">
-        <ActionTrail actions={pending.actions} turnId={null} viewer="employee" />
-        <div className="border-rule bg-paper max-w-[min(780px,100%)] rounded-[14px] border px-5 py-4 text-[15px] leading-relaxed sm:text-[16px]">
-          {pending.reply ? (
-            <p className="text-ink whitespace-pre-wrap">{pending.reply}</p>
-          ) : (
-            <TypingDots />
-          )}
+      {pending.toAgent ? (
+        <div className="flex flex-col items-start gap-2.5" aria-live="polite">
+          <ActionTrail actions={pending.actions} turnId={null} viewer="employee" />
+          <div className="animate-rise border-rule bg-paper max-w-[min(780px,100%)] rounded-[14px] border px-5 py-4 text-[15px] leading-relaxed sm:text-[16px]">
+            {pending.reply ? (
+              <p className="text-ink whitespace-pre-wrap">{pending.reply}</p>
+            ) : (
+              <TypingDots
+                label={
+                  pending.accepted
+                    ? "Nexo Assist está analisando sua mensagem"
+                    : "Enviando sua mensagem"
+                }
+              />
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
     </>
   );
 }

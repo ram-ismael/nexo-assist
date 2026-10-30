@@ -1,11 +1,20 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
+import { errorFields, log } from "@/server/log";
 
 export type PublicMetrics = {
   avgFirstResponseSeconds: number | null;
-  resolvedWithoutQueuePercent: number | null;
-  analystsOnline: number;
+  /** Share of recent assistant conversations that never went to the human queue. */
+  withoutHandoffPercent: number | null;
+  /** null when presence could not be read: the panel omits it instead of showing 0. */
+  analystsOnline: number | null;
+};
+
+const UNKNOWN: PublicMetrics = {
+  avgFirstResponseSeconds: null,
+  withoutHandoffPercent: null,
+  analystsOnline: null,
 };
 
 const MIN_SAMPLE = 5;
@@ -45,12 +54,7 @@ export async function publicMetrics(): Promise<PublicMetrics> {
         (select count(*)::int from analyst_presence where available and last_heartbeat_at > now() - interval '2 minutes') as online
     `);
     const row = result.rows[0];
-    if (!row)
-      return {
-        avgFirstResponseSeconds: null,
-        resolvedWithoutQueuePercent: null,
-        analystsOnline: 0,
-      };
+    if (!row) return UNKNOWN;
     const turns = Number(row.turns);
     const conversations = Number(row.conversations);
     return {
@@ -58,13 +62,14 @@ export async function publicMetrics(): Promise<PublicMetrics> {
         turns >= MIN_SAMPLE && row.avg_ms !== null
           ? Math.max(1, Math.round(Number(row.avg_ms) / 1000))
           : null,
-      resolvedWithoutQueuePercent:
+      withoutHandoffPercent:
         conversations >= MIN_SAMPLE
           ? Math.round((Number(row.without_handoff) / conversations) * 100)
           : null,
       analystsOnline: Number(row.online),
     };
-  } catch {
-    return { avgFirstResponseSeconds: null, resolvedWithoutQueuePercent: null, analystsOnline: 0 };
+  } catch (error) {
+    log("warn", "public metrics unavailable", errorFields(error));
+    return UNKNOWN;
   }
 }

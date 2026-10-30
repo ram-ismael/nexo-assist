@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import { assistantStatus } from "@/server/agent/health";
 import { db } from "@/server/db/client";
 
 /** Liveness plus dependency status. Reports configuration presence, never values. */
@@ -24,6 +25,7 @@ export async function GET(): Promise<Response> {
       status: status === 200 ? "ok" : "degraded",
       database,
       llm,
+      assistant: database === "ok" ? await assistantStatus() : "unknown",
       model: env.LLM_MODEL,
       ms: Date.now() - started,
     },

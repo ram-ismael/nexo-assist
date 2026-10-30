@@ -1,6 +1,13 @@
 import { Check } from "lucide-react";
 import type { PublicMetrics } from "@/server/metrics";
 
+// Literal class names so Tailwind generates them; the strip only has real metrics.
+const COLUMNS: Record<number, string> = {
+  1: "sm:grid-cols-1",
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+};
+
 /**
  * Left panel of the login. The conversation is an illustration of the product
  * (clearly not data); the numbers at the bottom are real or omitted.
@@ -13,14 +20,19 @@ export function LoginShowcase({ metrics }: { metrics: PublicMetrics }) {
           label: "primeira resposta, em média (7 dias)",
         }
       : null,
-    metrics.resolvedWithoutQueuePercent !== null
-      ? { value: `${metrics.resolvedWithoutQueuePercent}%`, label: "resolvidos sem fila (30 dias)" }
+    metrics.withoutHandoffPercent !== null
+      ? {
+          value: `${metrics.withoutHandoffPercent}%`,
+          label: "conversas sem precisar de analista (30 dias)",
+        }
       : null,
-    {
-      value: String(metrics.analystsOnline),
-      label: "analistas online agora",
-      online: metrics.analystsOnline > 0,
-    },
+    metrics.analystsOnline !== null
+      ? {
+          value: String(metrics.analystsOnline),
+          label: metrics.analystsOnline === 1 ? "analista online agora" : "analistas online agora",
+          online: metrics.analystsOnline > 0,
+        }
+      : null,
   ].filter((item): item is { value: string; label: string; online?: boolean } => item !== null);
 
   return (
@@ -60,30 +72,34 @@ export function LoginShowcase({ metrics }: { metrics: PublicMetrics }) {
         </figure>
       </div>
 
-      <dl className="grid grid-cols-1 gap-6 border-t border-white/10 pt-8 sm:grid-cols-3 sm:gap-0">
-        {stats.map((stat, index) => (
-          <div
-            key={stat.label}
-            className={index > 0 ? "sm:border-l sm:border-white/10 sm:pl-8" : ""}
-          >
-            <dt className="sr-only">{stat.label}</dt>
-            <dd className="font-display flex items-center gap-2 text-[40px] leading-none">
-              {stat.value}
-              {stat.online !== undefined ? (
-                <span
-                  className={
-                    stat.online
-                      ? "bg-success size-2.5 rounded-full"
-                      : "size-2.5 rounded-full bg-white/30"
-                  }
-                  aria-hidden="true"
-                />
-              ) : null}
-            </dd>
-            <dd className="mt-2 text-[14px] text-white/60">{stat.label}</dd>
-          </div>
-        ))}
-      </dl>
+      {stats.length > 0 ? (
+        <dl
+          className={`grid grid-cols-1 gap-6 border-t border-white/10 pt-8 sm:gap-0 ${COLUMNS[stats.length] ?? "sm:grid-cols-3"}`}
+        >
+          {stats.map((stat, index) => (
+            <div
+              key={stat.label}
+              className={index > 0 ? "sm:border-l sm:border-white/10 sm:pl-8" : ""}
+            >
+              <dt className="sr-only">{stat.label}</dt>
+              <dd className="font-display flex items-center gap-2 text-[40px] leading-none">
+                {stat.value}
+                {stat.online !== undefined ? (
+                  <span
+                    className={
+                      stat.online
+                        ? "bg-success size-2.5 rounded-full"
+                        : "size-2.5 rounded-full bg-white/30"
+                    }
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </dd>
+              <dd className="mt-2 text-[14px] text-white/60">{stat.label}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </div>
   );
 }

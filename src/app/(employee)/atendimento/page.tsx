@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ChatView } from "@/components/chat/chat-view";
 import { config } from "@/lib/config";
 import type { MessagePageDTO } from "@/lib/api-types";
+import { assistantStatus } from "@/server/agent/health";
 import { requirePageUser } from "@/server/auth/current-user";
 import { db } from "@/server/db/client";
 import { findLiveConversation, pageMessages } from "@/server/conversations/repository";
@@ -28,6 +29,7 @@ export default async function AttendancePage() {
       ),
       messages: await serializeMessages(db(), page.messages),
       hasMoreBefore: page.hasMoreBefore,
+      assistant: await assistantStatus(),
     };
   }
   return (
@@ -35,7 +37,7 @@ export default async function AttendancePage() {
       initial={initial}
       timeZone={env.calendar.timeZone}
       userId={user.id}
-      llmAvailable={env.NEXO_SCRIPTED_MODEL || !!env.ANTHROPIC_API_KEY}
+      assistant={initial?.assistant ?? (await assistantStatus())}
     />
   );
 }

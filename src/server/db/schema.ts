@@ -223,6 +223,8 @@ export const agentTurns = pgTable(
   },
   (table) => [
     index("agent_turns_conversation_idx").on(table.conversationId, table.startedAt),
+    // Service-wide reads by recency: assistant health and the login metrics.
+    index("agent_turns_started_idx").on(table.startedAt),
     // One agent turn at a time per conversation.
     uniqueIndex("agent_turns_one_running")
       .on(table.conversationId)

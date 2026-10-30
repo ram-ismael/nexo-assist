@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { config } from "@/lib/config";
 import type { MessagePageDTO } from "@/lib/api-types";
+import { assistantStatus } from "@/server/agent/health";
 import { assertCanViewConversation } from "@/server/auth/policies";
 import { db } from "@/server/db/client";
 import { json, route } from "@/server/http";
@@ -34,6 +35,7 @@ export const GET = route<"user", { id: string }>("user", async ({ req, user, par
     ),
     messages: await serializeMessages(db(), page.messages),
     hasMoreBefore: page.hasMoreBefore,
+    assistant: await assistantStatus(),
   };
   return json(body);
 });

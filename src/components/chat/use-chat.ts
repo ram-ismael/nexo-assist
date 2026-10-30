@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, newClientId, parseError } from "@/lib/api-client";
 
@@ -14,6 +15,8 @@ export type LiveAction = {
 export type PendingTurn = {
   clientId: string;
   text: string;
+  /** Only an agent-owned conversation gets an assistant answer to wait for. */
+  toAgent: boolean;
   accepted: boolean;
   actions: LiveAction[];
   reply: string;
@@ -45,7 +48,7 @@ export function mergeMessages(current: MessageDTO[], incoming: MessageDTO[]): Me
   return [...bySeq.values()].sort((left, right) => left.seq - right.seq);
 }
 
-export function useChat(initial: MessagePageDTO | null) {
+export function useChat(initial: MessagePageDTO | null, initialAssistant: AssistantStatus) {
   const [conversation, setConversation] = useState<ConversationDTO | null>(
     initial?.conversation ?? null,
   );
@@ -56,6 +59,7 @@ export function useChat(initial: MessagePageDTO | null) {
   const [pending, setPending] = useState<PendingTurn | null>(null);
   const [failure, setFailure] = useState<TurnFailure | null>(null);
   const [syncError, setSyncError] = useState(false);
+  const [assistant, setAssistant] = useState<AssistantStatus>(initialAssistant);
   const streaming = useRef(false);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -73,6 +77,7 @@ export function useChat(initial: MessagePageDTO | null) {
       );
       setConversation(page.conversation);
       setMessages((list) => mergeMessages(list, page.messages));
+      setAssistant(page.assistant);
       setSyncError(false);
     } catch (error) {
       if (error instanceof ApiRequestError && error.code === "offline") setSyncError(true);
@@ -92,10 +97,13 @@ export function useChat(initial: MessagePageDTO | null) {
     const onVisible = () => {
       if (document.visibilityState === "visible") void sync();
     };
+    const onOnline = () => void sync();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
   }, [conversation?.id, sync]);
 
@@ -177,6 +185,7 @@ export function useChat(initial: MessagePageDTO | null) {
       setPending({
         clientId,
         text: options.retryOfMessageId ? "" : text,
+        toAgent: (conversationRef.current?.state ?? "agent_active") === "agent_active",
         accepted: false,
         actions: [],
         reply: "",
@@ -272,6 +281,7 @@ export function useChat(initial: MessagePageDTO | null) {
     setConversation(page?.conversation ?? next ?? null);
     setMessages(page?.messages ?? []);
     setHasMoreBefore(page?.hasMoreBefore ?? false);
+    if (page) setAssistant(page.assistant);
     setFailure(null);
   }, []);
 
@@ -287,6 +297,7 @@ export function useChat(initial: MessagePageDTO | null) {
     failure,
     setFailure,
     syncError,
+    assistant,
     send,
     sync,
     replaceConversation,

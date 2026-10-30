@@ -3,6 +3,7 @@
 import { Clock3, Headset, History, MoreHorizontal, Plus, RotateCcw, WifiOff } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useCallback, useState } from "react";
+import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -10,7 +11,7 @@ import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/layout/employee-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner, TypingDots } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import type { ConversationState } from "@/domain/conversations";
 import { Composer } from "./composer";
@@ -32,12 +33,30 @@ type HistoryItem = {
   closedAt: string | null;
 };
 
+const ASSISTANT_PILL: Record<AssistantStatus, { text: string; tone: string; dot: string }> = {
+  online: {
+    text: "Assistente online",
+    tone: "bg-success-soft text-success-text",
+    dot: "bg-success",
+  },
+  degraded: {
+    text: "Assistente instável",
+    tone: "bg-warning-soft text-warning-text",
+    dot: "bg-warning",
+  },
+  unavailable: {
+    text: "Assistente indisponível",
+    tone: "bg-danger-soft text-danger-text",
+    dot: "bg-danger",
+  },
+};
+
 function StatusPill({
   conversation,
-  llmAvailable,
+  assistant,
 }: {
   conversation: ConversationDTO | null;
-  llmAvailable: boolean;
+  assistant: AssistantStatus;
 }) {
   const state = conversation?.state ?? "agent_active";
   const pill =
@@ -55,26 +74,20 @@ function StatusPill({
           }
         : state === "closed"
           ? { text: "Conversa encerrada", tone: "bg-desk text-ink-3", dot: "bg-ink-4" }
-          : llmAvailable
-            ? {
-                text: "Assistente online",
-                tone: "bg-success-soft text-success-text",
-                dot: "bg-success",
-              }
-            : {
-                text: "Assistente indisponível",
-                tone: "bg-danger-soft text-danger-text",
-                dot: "bg-danger",
-              };
+          : ASSISTANT_PILL[assistant];
   return (
     <span
       className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[14px] font-medium",
+        "inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[14px] font-medium transition-colors duration-300",
         pill.tone,
       )}
       role="status"
+      title={pill.text}
     >
-      <span className={cn("size-2 rounded-full", pill.dot)} aria-hidden="true" />
+      <span
+        className={cn("size-2 rounded-full transition-colors duration-300", pill.dot)}
+        aria-hidden="true"
+      />
       <span className="max-sm:sr-only">{pill.text}</span>
     </span>
   );
@@ -84,15 +97,15 @@ export function ChatView({
   initial,
   timeZone,
   userId,
-  llmAvailable,
+  assistant,
 }: {
   initial: MessagePageDTO | null;
   timeZone: string;
   userId: string;
-  llmAvailable: boolean;
+  assistant: AssistantStatus;
 }) {
   const toast = useToast();
-  const chat = useChat(initial);
+  const chat = useChat(initial, assistant);
   const { conversation, messages, pending, failure } = chat;
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [newBusy, setNewBusy] = useState(false);
@@ -106,6 +119,9 @@ export function ChatView({
     conversation.agentTurnCount >= conversation.agentTurnLimit &&
     state === "agent_active";
   const lastMessage = messages[messages.length - 1];
+  // A turn still running on the server that this tab is not streaming (reload,
+  // dropped connection): show it, and hold new messages the server would refuse.
+  const processingElsewhere = !pending && !!conversation?.agentBusy && state === "agent_active";
 
   const requestAnalyst = async () => {
     if (!conversation) return;
@@ -185,7 +201,7 @@ export function ChatView({
         title="Atendimento"
         right={
           <div className="flex items-center gap-2">
-            <StatusPill conversation={conversation} llmAvailable={llmAvailable} />
+            <StatusPill conversation={conversation} assistant={chat.assistant} />
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
                 aria-label="Mais opções"
@@ -273,9 +289,18 @@ export function ChatView({
           </div>
         }
         footer={
-          !viewing &&
-          (state === "waiting_analyst" || state === "analyst_active") &&
-          lastMessage?.kind !== "analyst" ? (
+          !viewing && processingElsewhere ? (
+            <div className="flex flex-col items-start gap-2.5" aria-live="polite">
+              <p className="text-ink-3 text-[14px]">
+                O Nexo Assist ainda está processando sua última mensagem.
+              </p>
+              <div className="border-rule bg-paper rounded-[14px] border px-5 py-4">
+                <TypingDots label="Nexo Assist está processando" />
+              </div>
+            </div>
+          ) : !viewing &&
+            (state === "waiting_analyst" || state === "analyst_active") &&
+            lastMessage?.kind !== "analyst" ? (
             <div
               className="bg-warning-soft text-warning-text flex items-center gap-2 self-start rounded-lg px-3.5 py-2.5 text-[14px]"
               role="status"
@@ -352,8 +377,8 @@ export function ChatView({
               <Composer
                 draftKey={`nexo-draft-${userId}`}
                 placeholder={placeholder}
-                busy={!!pending}
-                disabled={!!pending}
+                // Typing stays possible while an answer is on its way; only sending waits.
+                busy={!!pending || processingElsewhere}
                 onSend={(text) => chat.send(text)}
               />
             )}
