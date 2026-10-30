@@ -114,6 +114,14 @@ export function contactLabel(iso: string, timeZone: string, now = new Date()): s
   return `contato até ${untilLabel(iso, timeZone, now)}`;
 }
 
+/** WhatsApp-style "visto por último hoje às 10:42" / "ontem às 18:20" / "28 out às 09:10". */
+export function lastSeenLabel(iso: string, timeZone: string, now = new Date()): string {
+  const label = dayLabel(iso, timeZone, now);
+  const time = formatTime(iso, timeZone);
+  const day = label === "Hoje" || label === "Ontem" ? label.toLowerCase() : label;
+  return `visto por último ${day} às ${time}`;
+}
+
 export function initials(name: string): string {
   const words = name.trim().split(/\s+/);
   return (

@@ -3,7 +3,7 @@
 import { ChevronRight, LogOut, Menu, MessageSquare, User, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Logo } from "@/components/brand/logo";
 import { Avatar } from "@/components/ui/avatar";
 import { ToastProvider } from "@/components/ui/toast";
@@ -36,9 +36,28 @@ export function useLogout() {
   };
 }
 
+function subscribeConnection(onChange: () => void): () => void {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+/** The browser's real connection state: green dot online, grey when it drops. */
+function useConnected(): boolean {
+  return useSyncExternalStore(
+    subscribeConnection,
+    () => navigator.onLine,
+    () => true,
+  );
+}
+
 function SidebarContent({ user, onNavigate }: { user: ShellUser; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { logout, pending } = useLogout();
+  const connected = useConnected();
   return (
     <div className="flex h-full flex-col px-4 py-5">
       <Link href="/atendimento" onClick={onNavigate} className="self-start px-3">
@@ -69,10 +88,12 @@ function SidebarContent({ user, onNavigate }: { user: ShellUser; onNavigate?: ()
       </nav>
       <div className="border-rule mt-auto border-t pt-4">
         <div className="flex items-center gap-3 px-1">
-          <Avatar name={user.name} />
+          <Avatar name={user.name} online={connected} />
           <div className="min-w-0">
             <p className="text-ink truncate text-[15px] font-medium">{user.name}</p>
-            <p className="text-ink-3 truncate text-[13px]">{user.email}</p>
+            <p className="text-ink-3 truncate text-[13px]">
+              {connected ? user.email : "Sem conexão"}
+            </p>
           </div>
         </div>
         <button

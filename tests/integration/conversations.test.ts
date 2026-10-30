@@ -322,6 +322,41 @@ describe("conversation lifecycle", () => {
     expect((await startNewConversation(ana.id, 3)).id).toBe(next.id);
   });
 
+  it("marks analyst messages as read only once they reach the employee's open chat", async () => {
+    const { ana, conversation } = await waitingConversation();
+    const rafael = await sessionUser(RAFAEL);
+    await claimConversation(rafael, conversation.id);
+    const sent = await postAnalystMessage(rafael, conversation.id, {
+      clientId: "read-receipt-1",
+      text: "Oi, Ana!",
+    });
+
+    let [item] = await listQueue(db(), rafael.id, { filter: "mine", query: "" });
+    expect(item?.lastMessageRead).toBe(false);
+    let stored = await findConversation(db(), conversation.id);
+    expect(stored?.employeeReadSeq ?? 0).toBeLessThan(sent.seq);
+
+    // Her chat polls while open and visible: presence and the read mark move.
+    await touchEmployeePresence(ana.id, conversation.id);
+    stored = await findConversation(db(), conversation.id);
+    expect(stored?.employeeReadSeq).toBe(sent.seq);
+    expect(stored?.employeeSeenAt).not.toBeNull();
+    [item] = await listQueue(db(), rafael.id, { filter: "mine", query: "" });
+    expect(item?.lastMessageRead).toBe(true);
+
+    // A new message right after is not read yet, even within the 10 s presence throttle,
+    // and becomes read on the next poll.
+    const next = await postAnalystMessage(rafael, conversation.id, {
+      clientId: "read-receipt-2",
+      text: "Pode testar agora?",
+    });
+    [item] = await listQueue(db(), rafael.id, { filter: "mine", query: "" });
+    expect(item?.lastMessageRead).toBe(false);
+    await touchEmployeePresence(ana.id, conversation.id);
+    stored = await findConversation(db(), conversation.id);
+    expect(stored?.employeeReadSeq).toBe(next.seq);
+  });
+
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {
     const { conversation } = await waitingConversation();
     const rafael = await sessionUser(RAFAEL);

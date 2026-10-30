@@ -155,5 +155,7 @@ export async function serializeConversation(
         typingNow(conversation.analystTypingAt, Date.now()),
     },
     employeeOnline: employeeOnline(conversation.employeeSeenAt),
+    employeeLastSeenAt: conversation.employeeSeenAt?.toISOString() ?? null,
+    employeeReadSeq: conversation.employeeReadSeq,
   };
 }

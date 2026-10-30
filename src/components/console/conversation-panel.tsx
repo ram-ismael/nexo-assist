@@ -16,7 +16,7 @@ import { STATE_LABEL } from "@/domain/conversations";
 import type { ConversationDetailDTO, MessageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, errorMessage, newClientId } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { contactLabel } from "@/lib/format";
+import { contactLabel, lastSeenLabel } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -170,6 +170,8 @@ export function ConversationPanel({
           <p className="text-ink-3 truncate text-[14px]">
             {conversation.employeeOnline ? (
               <span className="text-success-text">online · </span>
+            ) : conversation.employeeLastSeenAt ? (
+              <span>{lastSeenLabel(conversation.employeeLastSeenAt, timeZone)} · </span>
             ) : null}
             {conversation.employee.department}
             {detail?.focusTicketNumber ? ` · ${detail.focusTicketNumber}` : ""}
@@ -270,6 +272,7 @@ export function ConversationPanel({
         onLoadOlder={feed.loadOlder}
         handlersFor={() => ({ onChanged: () => undefined })}
         outgoing={outgoing}
+        readUpTo={conversation.employeeReadSeq}
         typing={
           term ? null : conversation.typing.employee ? (
             <TypingIndicator name={firstName ?? "Funcionário"} align="left" tone="paper" />

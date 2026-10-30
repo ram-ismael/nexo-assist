@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "employee_read_seq" integer DEFAULT 0 NOT NULL;

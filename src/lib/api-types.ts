@@ -62,6 +62,10 @@ export type ConversationDTO = {
   typing: { employee: boolean; analyst: boolean };
   /** The employee has this chat open and visible right now. */
   employeeOnline: boolean;
+  /** Last time the chat was open and visible ("visto por último"). */
+  employeeLastSeenAt: string | null;
+  /** Messages up to this seq reached the employee's open chat ("lida", ✓✓). */
+  employeeReadSeq: number;
 };
 
 export type MessagePageDTO = {
@@ -155,6 +159,8 @@ export type QueueItemDTO = {
   lowCertainty: boolean;
   employeeTyping: boolean;
   employeeOnline: boolean;
+  /** The last message reached the employee's open chat (✓✓ vs ✓). */
+  lastMessageRead: boolean;
   /** The agent is answering right now (a turn is running). */
   agentBusy: boolean;
   /** Waiting or assumed because of a critical case. */

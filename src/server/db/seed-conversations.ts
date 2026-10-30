@@ -46,7 +46,7 @@ class Story {
   }
 
   async employee(minutesAgo: number, content: string) {
-    return appendMessage(
+    const message = await appendMessage(
       this.db,
       {
         conversationId: this.conversation.id,
@@ -56,6 +56,13 @@ class Story {
       },
       this.at(minutesAgo),
     );
+    // Writing means the chat was open: everything before is read, and this is
+    // when the employee was last seen.
+    await this.db
+      .update(schema.conversations)
+      .set({ employeeReadSeq: message.seq, employeeSeenAt: this.at(minutesAgo) })
+      .where(eq(schema.conversations.id, this.conversation.id));
+    return message;
   }
 
   async analyst(minutesAgo: number, analystId: string, content: string) {

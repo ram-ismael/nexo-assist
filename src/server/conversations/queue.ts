@@ -96,7 +96,7 @@ export async function listQueue(
       rows.map((row) => row.conversation.assignedAnalystId).filter((id): id is string => !!id),
     ),
   ];
-  const [unreadRows, handoffRows, analystRows, lowRows, busyRows] = await Promise.all([
+  const [unreadRows, handoffRows, analystRows, lowRows, busyRows, lastSeqRows] = await Promise.all([
     executor
       .select({ conversationId: messages.conversationId, count: sql<number>`count(*)::int` })
       .from(messages)
@@ -144,8 +144,14 @@ export async function listQueue(
           gt(agentTurns.startedAt, new Date(Date.now() - ABANDONED_TURN_MS)),
         ),
       ),
+    executor
+      .select({ conversationId: messages.conversationId, seq: sql<number>`max(${messages.seq})` })
+      .from(messages)
+      .where(inArray(messages.conversationId, ids))
+      .groupBy(messages.conversationId),
   ]);
   const busy = new Set(busyRows.map((row) => row.conversationId));
+  const lastSeq = new Map(lastSeqRows.map((row) => [row.conversationId, Number(row.seq)]));
   const ticketIds = [...new Set(handoffRows.flatMap((row) => row.ticketIds))];
   const ticketRows =
     ticketIds.length > 0
@@ -192,6 +198,7 @@ export async function listQueue(
       lowCertainty:
         conversation.state === "agent_active" && certainty.get(conversation.id) === "baixa",
       employeeTyping: employeeTyping(conversation),
+      lastMessageRead: conversation.employeeReadSeq >= (lastSeq.get(conversation.id) ?? 0),
       agentBusy: conversation.state === "agent_active" && busy.has(conversation.id),
       critical: !!handoff && showHandoff && handoff.reason === "critical",
       hadHandoff: !!handoff,

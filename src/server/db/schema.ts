@@ -167,6 +167,8 @@ export const conversations = pgTable(
     analystTypingAt: timestamp("analyst_typing_at", { withTimezone: true }),
     /** Last poll from the employee's open, visible chat: drives "online" in the console. */
     employeeSeenAt: timestamp("employee_seen_at", { withTimezone: true }),
+    /** Last message seq the employee's open, visible chat has received: "lida". */
+    employeeReadSeq: integer("employee_read_seq").notNull().default(0),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     version: integer("version").notNull().default(1),
     ...timestamps,
