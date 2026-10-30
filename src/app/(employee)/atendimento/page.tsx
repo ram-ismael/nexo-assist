@@ -6,13 +6,17 @@ import { requirePageUser } from "@/server/auth/current-user";
 import { db } from "@/server/db/client";
 import { findLiveConversation, pageMessages } from "@/server/conversations/repository";
 import { serializeConversation, serializeMessages } from "@/server/conversations/serialize";
+import { recoverAbandonedTurns } from "@/server/conversations/use-cases";
 
 export const metadata: Metadata = { title: "Atendimento" };
 
 export default async function AttendancePage() {
   const user = await requirePageUser("employee");
   const env = config();
-  const conversation = await findLiveConversation(db(), user.id);
+  let conversation = await findLiveConversation(db(), user.id);
+  if (conversation && (await recoverAbandonedTurns(conversation.id))) {
+    conversation = await findLiveConversation(db(), user.id);
+  }
   let initial: MessagePageDTO | null = null;
   if (conversation) {
     const page = await pageMessages(db(), conversation.id, { limit: 30 });

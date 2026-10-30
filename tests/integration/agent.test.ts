@@ -5,8 +5,9 @@ import { runAgentTurn, submitEmployeeMessage, type StreamEvent } from "@/server/
 import type { SessionUser } from "@/server/auth/sessions";
 import { closeDb, db } from "@/server/db/client";
 import { agentActions, agentDecisions, agentTurns, conversations } from "@/server/db/schema";
-import { findConversation } from "@/server/conversations/repository";
-import { claimConversation } from "@/server/conversations/use-cases";
+import { findConversation, pageMessages } from "@/server/conversations/repository";
+import { serializeConversation } from "@/server/conversations/serialize";
+import { claimConversation, recoverAbandonedTurns } from "@/server/conversations/use-cases";
 import { ANA, RAFAEL, resetDatabase, sessionUser } from "../support/db";
 
 let counter = 0;
@@ -125,6 +126,59 @@ describe("agent turns (scripted model, real tools and database)", () => {
       text: "Qual o status do meu chamado?",
     });
     expect(again.mode).toBe("duplicate");
+  });
+
+  it("recovers a conversation whose turn died with its function", async () => {
+    const ana = await sessionUser(ANA);
+    const submitted = await submitEmployeeMessage(ana, {
+      conversationId: null,
+      clientId: "client-abandoned-1",
+      text: "Qual o status do meu chamado?",
+    });
+    if (submitted.mode !== "agent") throw new Error("expected an agent turn");
+    const conversationId = submitted.conversation.id;
+    // The function is killed here: runAgentTurn never finishes. Age the turn.
+    await db()
+      .update(agentTurns)
+      .set({ startedAt: new Date(Date.now() - 5 * 60_000) })
+      .where(eq(agentTurns.id, submitted.turnId));
+
+    const stuck = await findConversation(db(), conversationId);
+    if (!stuck) throw new Error("conversation missing");
+    expect((await serializeConversation(db(), stuck, 30)).agentBusy).toBe(false);
+
+    expect(await recoverAbandonedTurns(conversationId)).toBe(true);
+    expect(await recoverAbandonedTurns(conversationId)).toBe(false);
+    const [turn] = await db().select().from(agentTurns).where(eq(agentTurns.id, submitted.turnId));
+    expect(turn).toMatchObject({ status: "failed", errorCode: "abandoned" });
+    const after = await findConversation(db(), conversationId);
+    expect(after?.agentTurnCount).toBe(0);
+    const page = await pageMessages(db(), conversationId, { limit: 10 });
+    expect(page.messages.at(-1)?.content).toContain("interrompida");
+
+    const next = await say(ana, "Qual o status do meu chamado?", conversationId);
+    expect(next.done?.type).toBe("done");
+  });
+
+  it("does not deliver an answer for a turn already closed as abandoned", async () => {
+    const ana = await sessionUser(ANA);
+    const submitted = await submitEmployeeMessage(ana, {
+      conversationId: null,
+      clientId: "client-abandoned-2",
+      text: "Qual o status do meu chamado?",
+    });
+    if (submitted.mode !== "agent") throw new Error("expected an agent turn");
+    await db()
+      .update(agentTurns)
+      .set({ status: "failed", errorCode: "abandoned" })
+      .where(eq(agentTurns.id, submitted.turnId));
+    const events: StreamEvent[] = [];
+    await runAgentTurn(ana, submitted, (event) => events.push(event));
+    const done = events.find((event) => event.type === "done");
+    expect(done && done.type === "done" ? done.discarded : null).toBe(true);
+    expect(done && done.type === "done" ? done.message : "missing").toBeNull();
+    const [turn] = await db().select().from(agentTurns).where(eq(agentTurns.id, submitted.turnId));
+    expect(turn?.status).toBe("failed");
   });
 
   it("reports provider unavailability truthfully and does not consume the session quota", async () => {

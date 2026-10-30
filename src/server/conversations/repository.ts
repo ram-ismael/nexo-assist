@@ -106,6 +106,19 @@ export async function appendMessage(
   },
   now = new Date(),
 ): Promise<MessageRow> {
+  const preview = input.content.trim() || describeBlocks(input.blocks ?? []);
+  // Touch the conversation first: the row lock it takes serializes writers of
+  // the same conversation, so seq order equals commit order and the `after=<seq>`
+  // polling cursor can never skip a message that commits late.
+  await executor
+    .update(conversations)
+    .set({
+      lastMessagePreview: preview.slice(0, 160),
+      lastMessageKind: input.kind,
+      lastActivityAt: now,
+      updatedAt: now,
+    })
+    .where(eq(conversations.id, input.conversationId));
   const inserted = await executor
     .insert(messages)
     .values({
@@ -121,16 +134,6 @@ export async function appendMessage(
     .returning();
   const message = inserted[0];
   if (!message) throw new Error("Falha ao gravar a mensagem");
-  const preview = input.content.trim() || describeBlocks(input.blocks ?? []);
-  await executor
-    .update(conversations)
-    .set({
-      lastMessagePreview: preview.slice(0, 160),
-      lastMessageKind: input.kind,
-      lastActivityAt: now,
-      updatedAt: now,
-    })
-    .where(eq(conversations.id, input.conversationId));
   return message;
 }
 
@@ -311,11 +314,102 @@ export async function loadDrafts(executor: Executor, ids: string[]) {
   );
 }
 
-export async function hasRunningTurn(executor: Executor, conversationId: string): Promise<boolean> {
+/**
+ * Longer than any turn can live: the chat route stops at 60 s (`maxDuration`)
+ * and the model call at LLM_TIMEOUT_MS. A turn still "running" after this was
+ * killed with its function and will never finish on its own.
+ */
+export const ABANDONED_TURN_MS = 2 * 60_000;
+
+function abandonedBefore(now: Date): Date {
+  return new Date(now.getTime() - ABANDONED_TURN_MS);
+}
+
+export async function hasRunningTurn(
+  executor: Executor,
+  conversationId: string,
+  now = new Date(),
+): Promise<boolean> {
   const rows = await executor
     .select({ id: agentTurns.id })
     .from(agentTurns)
-    .where(and(eq(agentTurns.conversationId, conversationId), eq(agentTurns.status, "running")))
+    .where(
+      and(
+        eq(agentTurns.conversationId, conversationId),
+        eq(agentTurns.status, "running"),
+        gt(agentTurns.startedAt, abandonedBefore(now)),
+      ),
+    )
     .limit(1);
   return rows.length > 0;
+}
+
+export async function hasAbandonedTurn(
+  executor: Executor,
+  conversationId: string,
+  now = new Date(),
+): Promise<boolean> {
+  const rows = await executor
+    .select({ id: agentTurns.id })
+    .from(agentTurns)
+    .where(
+      and(
+        eq(agentTurns.conversationId, conversationId),
+        eq(agentTurns.status, "running"),
+        lt(agentTurns.startedAt, abandonedBefore(now)),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * Closes turns whose function died mid-answer, like a failed turn: the session
+ * quota is given back and the employee sees that the answer was interrupted.
+ * Call with the conversation row locked.
+ */
+export async function reapAbandonedTurns(
+  executor: Executor,
+  conversationId: string,
+  now = new Date(),
+): Promise<number> {
+  const reaped = await executor
+    .update(agentTurns)
+    .set({ status: "failed", errorCode: "abandoned", finishedAt: now })
+    .where(
+      and(
+        eq(agentTurns.conversationId, conversationId),
+        eq(agentTurns.status, "running"),
+        lt(agentTurns.startedAt, abandonedBefore(now)),
+      ),
+    )
+    .returning({ id: agentTurns.id });
+  if (reaped.length === 0) return 0;
+  await executor
+    .update(conversations)
+    .set({
+      agentTurnCount: sql`greatest(${conversations.agentTurnCount} - ${reaped.length}, 0)`,
+    })
+    .where(eq(conversations.id, conversationId));
+  for (const turn of reaped) {
+    await appendMessage(
+      executor,
+      {
+        conversationId,
+        kind: "system",
+        senderId: null,
+        content: "O Nexo Assist não conseguiu responder: a resposta foi interrompida",
+        blocks: [
+          {
+            type: "notice",
+            tone: "error",
+            text: "Sua mensagem foi registrada. Envie de novo ou fale com um analista.",
+          },
+        ],
+        turnId: turn.id,
+      },
+      now,
+    );
+  }
+  return reaped.length;
 }

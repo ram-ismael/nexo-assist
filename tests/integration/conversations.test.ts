@@ -5,6 +5,7 @@ import { conversations, tickets } from "@/server/db/schema";
 import {
   appendMessage,
   findConversation,
+  lockConversation,
   getOrCreateLiveConversation,
   pageMessages,
 } from "@/server/conversations/repository";
@@ -124,6 +125,36 @@ describe("conversation lifecycle", () => {
     expect(seen).toEqual(Array.from({ length: 120 }, (_, index) => `m${index}`));
     const tail = await pageMessages(db(), conversation.id, { after: 115, limit: 100 });
     expect(tail.messages.map((message) => message.seq)).toEqual([116, 117, 118, 119, 120]);
+  });
+
+  it("assigns message seq in commit order, so the polling cursor never skips one", async () => {
+    const ana = await sessionUser(ANA);
+    const conversation = await getOrCreateLiveConversation(db(), ana.id);
+    let late: Promise<{ seq: number }> | undefined;
+    const early = await db().transaction(async (tx) => {
+      // Another writer holds the conversation (claim, handoff, finishing turn)...
+      await lockConversation(tx, conversation.id);
+      // ...while a second writer starts appending to the same conversation.
+      late = db().transaction((other) =>
+        appendMessage(other, {
+          conversationId: conversation.id,
+          kind: "system",
+          senderId: null,
+          content: "segunda",
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return appendMessage(tx, {
+        conversationId: conversation.id,
+        kind: "system",
+        senderId: null,
+        content: "primeira",
+      });
+    });
+    const second = await late;
+    // The first commit must carry the lower seq; otherwise a client that polled
+    // between the two commits would move its cursor past the late message.
+    expect(early.seq).toBeLessThan(second?.seq ?? 0);
   });
 
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {

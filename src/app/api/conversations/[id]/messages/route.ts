@@ -6,6 +6,7 @@ import { db } from "@/server/db/client";
 import { json, route } from "@/server/http";
 import { findConversation, pageMessages } from "@/server/conversations/repository";
 import { serializeConversation, serializeMessages } from "@/server/conversations/serialize";
+import { recoverAbandonedTurns } from "@/server/conversations/use-cases";
 
 const query = z.object({
   before: z.coerce.number().int().positive().optional(),
@@ -18,8 +19,11 @@ const query = z.object({
  * page (upward scroll). `after`: incremental sync used by polling.
  */
 export const GET = route<"user", { id: string }>("user", async ({ req, user, params }) => {
-  const conversation = await findConversation(db(), params.id);
+  let conversation = await findConversation(db(), params.id);
   assertCanViewConversation(user, conversation);
+  if (await recoverAbandonedTurns(conversation.id)) {
+    conversation = (await findConversation(db(), params.id)) ?? conversation;
+  }
   const options = query.parse(Object.fromEntries(req.nextUrl.searchParams));
   const page = await pageMessages(db(), conversation.id, options);
   const body: MessagePageDTO = {

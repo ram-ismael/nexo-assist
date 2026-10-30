@@ -11,7 +11,9 @@ import { performHandoff } from "./handoff";
 import {
   appendMessage,
   findMessageByClientId,
+  hasAbandonedTurn,
   lockConversation,
+  reapAbandonedTurns,
   transitionConversation,
   type ConversationRow,
   type MessageRow,
@@ -127,24 +129,16 @@ export async function employeeRequestsAnalyst(user: SessionUser, conversationId:
 }
 
 /**
- * Employee message while a person owns the conversation: stored for the
- * analyst, no agent involved. Idempotent on the client message id.
+ * Read paths call this so a turn killed with its function stops showing as
+ * "processing" and the employee learns the answer was interrupted. The cheap
+ * indexed check runs first; the locking transaction only when there is work.
  */
-export async function postEmployeeMessageToHuman(
-  user: SessionUser,
-  conversation: ConversationRow,
-  input: { clientId: string; text: string },
-): Promise<MessageRow> {
+export async function recoverAbandonedTurns(conversationId: string): Promise<boolean> {
+  if (!(await hasAbandonedTurn(db(), conversationId))) return false;
   return db().transaction(async (tx) => {
-    const existing = await findMessageByClientId(tx, conversation.id, input.clientId);
-    if (existing) return existing;
-    return appendMessage(tx, {
-      conversationId: conversation.id,
-      kind: "employee",
-      senderId: user.id,
-      content: input.text,
-      clientId: input.clientId,
-    });
+    const conversation = await lockConversation(tx, conversationId);
+    if (!conversation) return false;
+    return (await reapAbandonedTurns(tx, conversationId)) > 0;
   });
 }
 
