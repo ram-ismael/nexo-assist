@@ -178,7 +178,9 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 - **Postgres é a fonte da verdade** para conversas, mensagens, chamados, estado (agent ou analista), rascunhos, decisões e auditoria. Sobrevive a refresh, reinício e novo deploy. `localStorage` guarda apenas o rascunho de texto não enviado.
 - **Migrações versionadas** (`drizzle/`) e **seed idempotente** (`on conflict do nothing`): rodar de novo não duplica nem desfaz alterações reais.
 - **Agent → funcionário**: streaming NDJSON da própria resposta do turno (ações e texto em tempo real).
-- **Funcionário ↔ analista**: _polling_ curto e incremental (`?after=<seq>`, a cada 3–5 s, só com a aba visível). Não é WebSocket; escolhi isso porque funciona em funções serverless sem um serviço de tempo real extra, e a carga por consulta é um índice. A troca por push está em [trade-offs](#trade-offs-e-limitações).
+- **Funcionário ↔ analista**: _polling_ curto e incremental (`?after=<seq>`, a cada 3–5 s, só com a aba visível, e imediato quando a aba volta ou a rede reconecta). Cada mensagem trava a linha da conversa antes de receber o `seq`, então a ordem do `seq` é a ordem de commit e o cursor nunca pula uma mensagem que confirmou atrasada. Não é WebSocket; escolhi isso porque funciona em funções serverless sem um serviço de tempo real extra, e a carga por consulta é um índice. A troca por push está em [trade-offs](#trade-offs-e-limitações).
+- **Turno interrompido**: se a função morrer no meio de uma resposta, o turno fica "em andamento" no banco. Depois de 2 minutos (mais que o limite de 60 s da rota) ele é encerrado como abandonado na próxima leitura: a cota volta, o funcionário vê que a resposta foi interrompida e uma resposta tardia é descartada.
+- **Estados honestos**: "Assistente online / instável / indisponível" vem da configuração e de como terminaram os últimos turnos do serviço; "Enviando…" até o servidor confirmar; "processando" só quando existe turno em andamento no banco; o indicador de digitação do assistente só aparece quando a mensagem vai para o agent. Reenviar depois de uma queda reutiliza o id do cliente, então o servidor grava uma vez.
 - **Histórico infinito**: abre na página mais recente (30 mensagens) e carrega as anteriores ao rolar para cima, com cursor estável (`seq` monotônico) e âncora de rolagem para não pular. Mensagens novas não puxam a tela se você estiver lendo o passado; aparece "Nova mensagem".
 
 ## Autenticação, autorização e segurança
@@ -188,6 +190,7 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 - Autorização central (`src/server/auth/policies.ts`): funcionário só vê o que é dele; recurso de outra pessoa responde 404. Analistas acessam o que o atendimento exige.
 - Mutações exigem `Origin` do próprio site (CSRF), corpo limitado, validação Zod, mensagens limitadas a 2.000 caracteres.
 - Conteúdo de artigos e chamados é tratado como dado, não instrução; o modelo não executa SQL nem escreve no banco diretamente.
+- Content-Security-Policy com nonce por requisição (`script-src 'nonce-…' 'strict-dynamic'`, sem `object`, sem _framing_), HSTS em produção; um novo login revoga a sessão anterior do navegador; sair do console tira o analista de "online" na hora.
 - Chaves só no servidor (nunca `NEXT_PUBLIC_*`), cabeçalhos de segurança, logs estruturados sem conteúdo de mensagens.
 
 Detalhes em [docs/security.md](docs/security.md).
@@ -201,9 +204,9 @@ pnpm eval:agent        # 15 cenários do PRD contra o modelo real (precisa da ch
 pnpm verify            # formatação, lint, tipos, testes e build
 ```
 
-- **Unitários (38)**: limites do SLA (fim de semana, antes/depois do expediente, horário de fechamento, feriado, crítico 24h), prioridade, duplicidade, janela de reabertura, máquina de estados, componentes e formatação de datas.
-- **Integração (27)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, limite por minuto, retry e indisponibilidade do serviço de chamados.
-- **E2E (11)**: login e sessão, perfil, isolamento via API, CSRF, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
+- **Unitários (43)**: limites do SLA (fim de semana, antes/depois do expediente, horário de fechamento, feriado, crítico 24h), prioridade, duplicidade, janela de reabertura, máquina de estados, componentes e formatação de datas.
+- **Integração (31)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ordem de commit do `seq`, turno abandonado, contagens da fila, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, limite por minuto, retry e indisponibilidade do serviço de chamados.
+- **E2E (13)**: login e sessão, perfil, isolamento via API, CSRF, CSP sem violações, rotação de sessão, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
 - **Avaliação do agent**: `tests/eval/agent-eval.test.ts` cobre os 15 cenários do PRD (VPN no Windows 10 e 11, duplicado, reabertura dentro e fora dos 7 dias, reunião no mesmo dia, queda geral, pedido de monitor, status sem número, prazo vencido, pedido de analista, mensagem vaga, assunto de RH, sistema fora do ar, chamado de outra pessoa). Verifica ferramentas usadas, rascunhos e estado final, nunca o texto exato.
 
 O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como passo manual. Resultados atuais em [docs/testing.md](docs/testing.md).
@@ -214,11 +217,11 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 - Contexto limitado (16 mensagens + fatos do turno), `maxOutputTokens` 1.200, no máximo 8 passos por turno, timeout de 45 s.
 - Limites no Postgres, compartilhados entre instâncias: 8 turnos/min e 150/dia por funcionário, teto global diário configurável, 20 logins/10 min por IP. Recomenda-se também um limite de gasto no console do provedor.
 - Latência e tokens de cada turno ficam em `agent_turns`; os números da tela de login são calculados disso (e omitidos sem amostra suficiente).
-- Consultas indexadas, paginação por cursor, sem N+1 nas páginas de mensagens e na fila, pool pequeno de conexões para serverless.
+- Consultas indexadas, paginação por cursor, sem N+1 nas páginas de mensagens e na fila, pool pequeno de conexões para serverless. A fila do analista foi medida com 150 mil conversas e 1,2 milhão de mensagens: contagens de 25,9 ms para 0,8 ms e lista de 29 ms para 6,6 ms ([como medir](docs/testing.md#desempenho-da-fila-do-analista)).
 
 ## Git e CI
 
-- `main`: versões estáveis. `dev`: integração. Funcionalidades em branches `feat/*` com PR para `dev`; release por PR `dev → main`.
+- Só duas branches: `dev` (integração, onde os commits entram) e `main` (estável, produção). Release por PR `dev → main`.
 - Issues por marco (#1–#7), PRs ligados a elas.
 - GitHub Actions: formatação, lint, tipos, unitários, integração (Postgres de serviço) e build; um segundo job roda o Playwright contra o build de produção.
 
@@ -231,7 +234,7 @@ Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em 
 3. `pnpm db:setup` contra o Neon (migrações são um passo explícito de release).
 4. Conectar o repositório: `main` em produção, demais branches em preview.
 
-**Estado:** ainda não publicado. Faltam credenciais que não estão disponíveis neste ambiente (login na Vercel, banco Neon e chave da Anthropic). Os passos exatos estão em [docs/deployment.md](docs/deployment.md#o-que-falta).
+**Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#estado).
 
 ## Trade-offs e limitações
 
@@ -241,7 +244,9 @@ Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em 
 - **Login de demonstração** aceita qualquer senha para e-mails do seed. Inaceitável com dados reais.
 - **Circuit breaker por instância**: protege cada função, não coordena entre instâncias.
 - **"Segurança" do agent é declarada pelo modelo**, não calibrada estatisticamente; por isso é qualitativa e acompanhada das ações que a sustentam.
-- **Presença do analista** por heartbeat de 60 s; "online" significa "console aberto e disponível nos últimos 2 minutos".
+- **Presença do analista** por heartbeat de 60 s; "online" significa "console aberto e disponível nos últimos 2 minutos" (sair zera na hora; fechar a aba leva até 2 minutos).
+- **Lido/não lido** na fila é compartilhado entre analistas (um marcador por conversa), não individual.
+- **Sem indicador de digitação entre pessoas**: exigiria canal de push; não há indicador simulado.
 
 ## O que eu faria com mais tempo
 
