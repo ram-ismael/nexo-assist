@@ -1,39 +1,34 @@
 import { Check } from "lucide-react";
 import type { PublicMetrics } from "@/server/metrics";
 
-// Literal class names so Tailwind generates them; the strip only has real metrics.
-const COLUMNS: Record<number, string> = {
-  1: "sm:grid-cols-1",
-  2: "sm:grid-cols-2",
-  3: "sm:grid-cols-3",
-};
+type Stat = { value: string | null; label: string; pending: string; online?: boolean };
 
 /**
  * Left panel of the login. The conversation is an illustration of the product
- * (clearly not data); the numbers at the bottom are real or omitted.
+ * (clearly marked); the numbers at the bottom are computed from stored turns,
+ * conversations and analyst heartbeats. Without enough data a metric shows "—"
+ * and says why, never an invented value.
  */
 export function LoginShowcase({ metrics }: { metrics: PublicMetrics }) {
-  const stats = [
-    metrics.avgFirstResponseSeconds !== null
-      ? {
-          value: `${metrics.avgFirstResponseSeconds} s`,
-          label: "primeira resposta, em média (7 dias)",
-        }
-      : null,
-    metrics.withoutHandoffPercent !== null
-      ? {
-          value: `${metrics.withoutHandoffPercent}%`,
-          label: "conversas sem precisar de analista (30 dias)",
-        }
-      : null,
-    metrics.analystsOnline !== null
-      ? {
-          value: String(metrics.analystsOnline),
-          label: metrics.analystsOnline === 1 ? "analista online agora" : "analistas online agora",
-          online: metrics.analystsOnline > 0,
-        }
-      : null,
-  ].filter((item): item is { value: string; label: string; online?: boolean } => item !== null);
+  const stats: Stat[] = [
+    {
+      value:
+        metrics.avgFirstResponseSeconds !== null ? `${metrics.avgFirstResponseSeconds} s` : null,
+      label: "primeira resposta, em média",
+      pending: "Ainda sem respostas suficientes do assistente nos últimos 7 dias.",
+    },
+    {
+      value: metrics.withoutHandoffPercent !== null ? `${metrics.withoutHandoffPercent}%` : null,
+      label: "resolvidos sem fila",
+      pending: "Ainda sem conversas suficientes nos últimos 30 dias.",
+    },
+    {
+      value: metrics.analystsOnline !== null ? String(metrics.analystsOnline) : null,
+      label: metrics.analystsOnline === 1 ? "analista online agora" : "analistas online agora",
+      pending: "Presença dos analistas indisponível no momento.",
+      online: (metrics.analystsOnline ?? 0) > 0,
+    },
+  ];
 
   return (
     <div className="flex flex-1 flex-col">
@@ -66,40 +61,49 @@ export function LoginShowcase({ metrics }: { metrics: PublicMetrics }) {
           <p className="mt-2 max-w-[340px] rounded-xl bg-white/10 px-3.5 py-2.5 text-[14px] leading-relaxed text-white/90">
             Pronto: abri o chamado com prioridade alta. Um analista fala com você em até 4 h úteis.
           </p>
+          <p className="text-ink mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-[13px]">
+            <span className="bg-warning size-2 rounded-full" aria-hidden="true" />
+            <span className="font-semibold">INC-20517</span>
+            <span className="text-ink-3">Rede e VPN · Alta · em até 4 h</span>
+          </p>
           <figcaption className="mt-3 text-[11px] tracking-wide text-white/40 uppercase">
             Exemplo ilustrativo
           </figcaption>
         </figure>
       </div>
 
-      {stats.length > 0 ? (
-        <dl
-          className={`grid grid-cols-1 gap-6 border-t border-white/10 pt-8 sm:gap-0 ${COLUMNS[stats.length] ?? "sm:grid-cols-3"}`}
-        >
-          {stats.map((stat, index) => (
-            <div
-              key={stat.label}
-              className={index > 0 ? "sm:border-l sm:border-white/10 sm:pl-8" : ""}
-            >
-              <dt className="sr-only">{stat.label}</dt>
-              <dd className="font-display flex items-center gap-2 text-[40px] leading-none">
-                {stat.value}
-                {stat.online !== undefined ? (
-                  <span
-                    className={
-                      stat.online
-                        ? "bg-success size-2.5 rounded-full"
-                        : "size-2.5 rounded-full bg-white/30"
-                    }
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </dd>
-              <dd className="mt-2 text-[14px] text-white/60">{stat.label}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      <dl className="grid grid-cols-1 gap-6 border-t border-white/10 pt-8 sm:grid-cols-3 sm:gap-0">
+        {stats.map((stat, index) => (
+          <div
+            key={stat.label}
+            className={index > 0 ? "sm:border-l sm:border-white/10 sm:pl-8" : ""}
+            title={stat.value === null ? stat.pending : undefined}
+          >
+            <dt className="sr-only">{stat.label}</dt>
+            <dd className="font-display flex items-center gap-2 text-[40px] leading-none">
+              {stat.value ?? (
+                <>
+                  <span aria-hidden="true" className="text-white/40">
+                    —
+                  </span>
+                  <span className="sr-only">{stat.pending}</span>
+                </>
+              )}
+              {stat.online !== undefined && stat.value !== null ? (
+                <span
+                  className={
+                    stat.online
+                      ? "bg-success size-2.5 rounded-full"
+                      : "size-2.5 rounded-full bg-white/30"
+                  }
+                  aria-hidden="true"
+                />
+              ) : null}
+            </dd>
+            <dd className="mt-2 text-[14px] text-white/60">{stat.label}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/brand/logo";
 import { LoginForm, SupportLink } from "@/components/layout/login-form";
 import { LoginShowcase } from "@/components/layout/login-showcase";
-import { config } from "@/lib/config";
 import { getCurrentUser, homeFor } from "@/server/auth/current-user";
 import { publicMetrics } from "@/server/metrics";
 
@@ -17,7 +16,6 @@ export default async function LoginPage({
   const user = await getCurrentUser();
   if (user) redirect(homeFor(user));
   const [metrics, params] = await Promise.all([publicMetrics(), searchParams]);
-  const demo = config().DEMO_AUTH_ENABLED;
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.25fr_1fr]">
@@ -45,7 +43,7 @@ export default async function LoginPage({
               Sua sessão expirou. Entre novamente para continuar.
             </p>
           ) : null}
-          <LoginForm demo={demo} />
+          <LoginForm />
         </div>
         <footer className="text-ink-3 flex flex-wrap items-center justify-between gap-2 text-[13px]">
           <span>© {new Date().getFullYear()} Nexo · Service desk de TI</span>

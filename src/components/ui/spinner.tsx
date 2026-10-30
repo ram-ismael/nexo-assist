@@ -22,14 +22,16 @@ export function Spinner({ className, label }: { className?: string; label?: stri
   );
 }
 
+/** Three dots in a soft wave: the one "someone is writing" signal, for people and the AI. */
 export function TypingDots({ label = "Nexo Assist está escrevendo" }: { label?: string }) {
   return (
-    <span role="status" aria-label={label} className="inline-flex items-center gap-1">
+    <span role="status" aria-label={label} className="inline-flex h-5 items-center gap-[5px]">
       {[0, 1, 2].map((index) => (
         <span
           key={index}
-          className="animate-pulse-dot bg-ink-3 size-1.5 rounded-full"
-          style={{ animationDelay: `${index * 160}ms` }}
+          aria-hidden="true"
+          className="animate-typing bg-ink-3 size-[7px] rounded-full"
+          style={{ animationDelay: `${index * 150}ms` }}
         />
       ))}
     </span>

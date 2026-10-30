@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function LoginForm({ demo }: { demo: boolean }) {
+export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -146,13 +146,6 @@ export function LoginForm({ demo }: { demo: boolean }) {
           {loading ? "Entrando…" : "Entrar"}
           {!loading ? <ArrowRight className="size-[18px]" aria-hidden="true" /> : null}
         </Button>
-        <hr className="border-rule mt-9" />
-        {demo ? (
-          <p className="text-ink-3 mt-4 text-[13px] leading-relaxed">
-            Ambiente de demonstração com dados fictícios: e-mails cadastrados (ex.:
-            ana.souza@nexo.com.br ou rafael.lima@nexo.com.br) entram com qualquer senha.
-          </p>
-        ) : null}
       </form>
 
       <Dialog
@@ -162,13 +155,6 @@ export function LoginForm({ demo }: { demo: boolean }) {
         description="Como recuperar o acesso"
       >
         <div className="text-ink-2 space-y-3 text-sm leading-relaxed">
-          {demo ? (
-            <p>
-              Este é um ambiente de demonstração: a senha não é verificada e nenhuma senha real é
-              guardada aqui, por isso não existe redefinição. Entre com um e-mail cadastrado e
-              qualquer senha.
-            </p>
-          ) : null}
           <p>
             Na Nexo, a senha da rede é gerenciada pela TI. Para redefini-la, use o autoatendimento
             de senhas do Portal do Colaborador a partir de outro dispositivo ou ligue no ramal 4000

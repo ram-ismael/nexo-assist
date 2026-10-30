@@ -37,7 +37,9 @@ pnpm db:setup                   # migrações + seed (idempotente)
 pnpm dev                        # http://localhost:3000
 ```
 
-Contas de demonstração (qualquer senha não vazia):
+### Acesso de demonstração
+
+Este é um ambiente com **dados fictícios** e o login é de demonstração (`DEMO_AUTH_ENABLED=true`): qualquer e-mail da tabela abaixo entra com **qualquer senha não vazia**. A tela de login não exibe esse aviso de propósito, para ficar igual a um produto real; a informação fica aqui. E-mails fora do seed não entram.
 
 | Perfil      | E-mail                      | Observação                                                    |
 | ----------- | --------------------------- | ------------------------------------------------------------- |
@@ -180,6 +182,8 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 - **Agent → funcionário**: streaming NDJSON da própria resposta do turno (ações e texto em tempo real).
 - **Funcionário ↔ analista**: _polling_ curto e incremental (`?after=<seq>`, a cada 3–5 s, só com a aba visível, e imediato quando a aba volta ou a rede reconecta). Cada mensagem trava a linha da conversa antes de receber o `seq`, então a ordem do `seq` é a ordem de commit e o cursor nunca pula uma mensagem que confirmou atrasada. Não é WebSocket; escolhi isso porque funciona em funções serverless sem um serviço de tempo real extra, e a carga por consulta é um índice. A troca por push está em [trade-offs](#trade-offs-e-limitações).
 - **Turno interrompido**: se a função morrer no meio de uma resposta, o turno fica "em andamento" no banco. Depois de 2 minutos (mais que o limite de 60 s da rota) ele é encerrado como abandonado na próxima leitura: a cota volta, o funcionário vê que a resposta foi interrompida e uma resposta tardia é descartada.
+- **"Escrevendo…" entre pessoas**: enquanto o funcionário ou o analista digita, o navegador avisa o servidor no máximo a cada 3 s; o outro lado vê os três pontinhos animados (sem texto) em até ~2 s, pelo mesmo polling. O sinal vale 6 s, some quando a mensagem é gravada (no mesmo commit) ou quando o texto é apagado, e só é aceito de quem está na conversa (o funcionário dela ou o analista que assumiu).
+- **Resposta da IA em tempo real**: o texto aparece conforme o modelo gera, com cursor piscando, na mesma bolha que vira a mensagem final (sem piscar nem pular). O analista vê os pontinhos do Nexo Assist enquanto há um turno em andamento.
 - **Estados honestos**: "Assistente online / instável / indisponível" vem da configuração e de como terminaram os últimos turnos do serviço; "Enviando…" até o servidor confirmar; "processando" só quando existe turno em andamento no banco; o indicador de digitação do assistente só aparece quando a mensagem vai para o agent. Reenviar depois de uma queda reutiliza o id do cliente, então o servidor grava uma vez.
 - **Histórico infinito**: abre na página mais recente (30 mensagens) e carrega as anteriores ao rolar para cima, com cursor estável (`seq` monotônico) e âncora de rolagem para não pular. Mensagens novas não puxam a tela se você estiver lendo o passado; aparece "Nova mensagem".
 
@@ -205,8 +209,8 @@ pnpm verify            # formatação, lint, tipos, testes e build
 ```
 
 - **Unitários (43)**: limites do SLA (fim de semana, antes/depois do expediente, horário de fechamento, feriado, crítico 24h), prioridade, duplicidade, janela de reabertura, máquina de estados, componentes e formatação de datas.
-- **Integração (31)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ordem de commit do `seq`, turno abandonado, contagens da fila, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, limite por minuto, retry e indisponibilidade do serviço de chamados.
-- **E2E (13)**: login e sessão, perfil, isolamento via API, CSRF, CSP sem violações, rotação de sessão, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
+- **Integração (33)**: isolamento entre funcionários, numeração concorrente, confirmação idempotente com cliques simultâneos, claim concorrente, paginação de 120 mensagens, ordem de commit do `seq`, turno abandonado, contagens da fila, ferramenta negada após o analista assumir, limite da sessão, falha do provedor sem consumir cota, limite por minuto, retry e indisponibilidade do serviço de chamados.
+- **E2E (14)**: login e sessão, perfil, isolamento via API, CSRF, CSP sem violações, rotação de sessão, "escrevendo…" nos dois sentidos com dois navegadores e resposta da IA em tempo real, jornada completa consulta → vencido → transferência → analista assume → responde → devolve, abertura de chamado só após confirmar, histórico de 110 mensagens com rolagem infinita, e layouts de celular.
 - **Avaliação do agent**: `tests/eval/agent-eval.test.ts` cobre os 15 cenários do PRD (VPN no Windows 10 e 11, duplicado, reabertura dentro e fora dos 7 dias, reunião no mesmo dia, queda geral, pedido de monitor, status sem número, prazo vencido, pedido de analista, mensagem vaga, assunto de RH, sistema fora do ar, chamado de outra pessoa). Verifica ferramentas usadas, rascunhos e estado final, nunca o texto exato.
 
 O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como passo manual. Resultados atuais em [docs/testing.md](docs/testing.md).
@@ -246,7 +250,7 @@ Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em 
 - **"Segurança" do agent é declarada pelo modelo**, não calibrada estatisticamente; por isso é qualitativa e acompanhada das ações que a sustentam.
 - **Presença do analista** por heartbeat de 60 s; "online" significa "console aberto e disponível nos últimos 2 minutos" (sair zera na hora; fechar a aba leva até 2 minutos).
 - **Lido/não lido** na fila é compartilhado entre analistas (um marcador por conversa), não individual.
-- **Sem indicador de digitação entre pessoas**: exigiria canal de push; não há indicador simulado.
+- **"Escrevendo…" por polling**: aparece com até ~2 s de atraso; instantâneo exigiria um canal de push (WebSocket).
 
 ## O que eu faria com mais tempo
 
