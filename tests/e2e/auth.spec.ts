@@ -35,8 +35,12 @@ test("profile shows the signed-in identity and honest credential info", async ({
   await page.getByRole("link", { name: "Meu perfil" }).click();
   await expect(page.getByText("carla.mendes@nexo.com.br").first()).toBeVisible();
   await expect(page.getByText("Ana Souza")).toHaveCount(0);
+  await expect(page.getByText("Computador")).toHaveCount(0);
+  await expect(page.getByText("Área", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Redefinir senha" }).click();
-  await expect(page.getByRole("dialog")).toContainText("nenhum e-mail será enviado");
+  // The reset happens in the corporate portal; this app sends no e-mail itself.
+  await expect(page.getByRole("dialog")).toContainText("Portal do Colaborador");
+  await expect(page.getByRole("dialog")).toContainText("carla.mendes@nexo.com.br");
 });
 
 test("employees cannot read other employees' tickets through the API", async ({ page }) => {
