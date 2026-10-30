@@ -11,12 +11,14 @@ import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/layout/employee-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Spinner, TypingDots } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import type { ConversationState } from "@/domain/conversations";
 import { Composer } from "./composer";
 import { MessageList } from "./message-list";
+import { TypingIndicator } from "./typing-indicator";
 import { useChat } from "./use-chat";
+import { useTypingSignal } from "./use-typing-signal";
 
 const SUGGESTIONS = [
   "Meu notebook não conecta na VPN",
@@ -122,6 +124,12 @@ export function ChatView({
   // A turn still running on the server that this tab is not streaming (reload,
   // dropped connection): show it, and hold new messages the server would refuse.
   const processingElsewhere = !pending && !!conversation?.agentBusy && state === "agent_active";
+  const withPerson = state === "waiting_analyst" || state === "analyst_active";
+  const typingSignal = useTypingSignal(conversation?.id, withPerson && !viewing);
+  const analystTyping =
+    state === "analyst_active" && !!conversation?.typing.analyst && !viewing
+      ? (conversation.assignedAnalyst?.name.split(" ")[0] ?? "Analista")
+      : null;
 
   const requestAnalyst = async () => {
     if (!conversation) return;
@@ -288,19 +296,19 @@ export function ChatView({
             </div>
           </div>
         }
+        inPlace={chat.streamedInPlace}
+        typing={
+          viewing ? null : processingElsewhere ? (
+            <TypingIndicator name="Nexo Assist" align="left" tone="paper" />
+          ) : analystTyping ? (
+            <TypingIndicator name={analystTyping} align="left" tone="analyst" />
+          ) : null
+        }
         footer={
-          !viewing && processingElsewhere ? (
-            <div className="flex flex-col items-start gap-2.5" aria-live="polite">
-              <p className="text-ink-3 text-[14px]">
-                O Nexo Assist ainda está processando sua última mensagem.
-              </p>
-              <div className="border-rule bg-paper rounded-[14px] border px-5 py-4">
-                <TypingDots label="Nexo Assist está processando" />
-              </div>
-            </div>
-          ) : !viewing &&
-            (state === "waiting_analyst" || state === "analyst_active") &&
-            lastMessage?.kind !== "analyst" ? (
+          !viewing &&
+          !analystTyping &&
+          (state === "waiting_analyst" || state === "analyst_active") &&
+          lastMessage?.kind !== "analyst" ? (
             <div
               className="bg-warning-soft text-warning-text flex items-center gap-2 self-start rounded-lg px-3.5 py-2.5 text-[14px]"
               role="status"
@@ -379,6 +387,7 @@ export function ChatView({
                 placeholder={placeholder}
                 // Typing stays possible while an answer is on its way; only sending waits.
                 busy={!!pending || processingElsewhere}
+                typing={withPerson ? typingSignal : undefined}
                 onSend={(text) => chat.send(text)}
               />
             )}

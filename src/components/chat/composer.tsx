@@ -37,6 +37,7 @@ export function Composer({
   onSend,
   variant = "employee",
   maxLength = MAX_LENGTH,
+  typing,
 }: {
   draftKey: string;
   placeholder: string;
@@ -45,6 +46,8 @@ export function Composer({
   onSend: (text: string) => Promise<boolean>;
   variant?: "employee" | "console";
   maxLength?: number;
+  /** "Está escrevendo…" signal for the other person, when one is listening. */
+  typing?: { onTextChange: (text: string) => void; onBlur: () => void; onSent: () => void };
 }) {
   // The draft lives only in this browser; the server render always starts empty.
   const [value, setValue] = useState(() =>
@@ -69,7 +72,9 @@ export function Composer({
     if (!text || disabled || busy || text.length > maxLength) return;
     update("");
     const accepted = await onSend(text);
-    if (!accepted) update(text);
+    // The stored message clears the typing signal on the server.
+    if (accepted) typing?.onSent();
+    else update(text);
     textarea.current?.focus();
   };
 
@@ -101,7 +106,11 @@ export function Composer({
           suppressHydrationWarning
           value={value}
           disabled={disabled}
-          onChange={(event) => update(event.target.value)}
+          onChange={(event) => {
+            update(event.target.value);
+            typing?.onTextChange(event.target.value);
+          }}
+          onBlur={typing?.onBlur}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           className="text-ink placeholder:text-ink-3 max-h-[180px] min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-[15px] leading-6 outline-none disabled:cursor-not-allowed sm:text-[16px]"

@@ -162,6 +162,9 @@ export const conversations = pgTable(
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
     /** Last message the employee/analyst has seen, for unread counters. */
     analystReadSeq: integer("analyst_read_seq").notNull().default(0),
+    /** Last keystroke signal from each side, for "está escrevendo…" (short TTL). */
+    employeeTypingAt: timestamp("employee_typing_at", { withTimezone: true }),
+    analystTypingAt: timestamp("analyst_typing_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     version: integer("version").notNull().default(1),
     ...timestamps,

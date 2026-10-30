@@ -1,8 +1,8 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { config } from "@/lib/config";
 import type { SessionUser } from "@/server/auth/sessions";
 import { db } from "@/server/db/client";
-import { auditEvents, handoffs } from "@/server/db/schema";
+import { auditEvents, conversations, handoffs } from "@/server/db/schema";
 import { AppError, conflict, notFound } from "@/server/errors";
 import { callTicketService } from "@/server/tickets/gateway";
 import { confirmDraft, confirmationText } from "@/server/tickets/drafts";
@@ -269,4 +269,42 @@ export async function latestHandoff(conversationId: string) {
     .orderBy(desc(handoffs.createdAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * "Está escrevendo…" between people. Ownership and state are part of the
+ * update itself: only the conversation's employee while a person handles it,
+ * or the analyst who assumed it, can signal. Returns false when not allowed.
+ */
+export async function signalTyping(
+  user: SessionUser,
+  conversationId: string,
+  typing: boolean,
+): Promise<boolean> {
+  const at = typing ? new Date() : null;
+  const rows =
+    user.role === "employee"
+      ? await db()
+          .update(conversations)
+          .set({ employeeTypingAt: at })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.employeeId, user.id),
+              inArray(conversations.state, ["waiting_analyst", "analyst_active"]),
+            ),
+          )
+          .returning({ id: conversations.id })
+      : await db()
+          .update(conversations)
+          .set({ analystTypingAt: at })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.assignedAnalystId, user.id),
+              eq(conversations.state, "analyst_active"),
+            ),
+          )
+          .returning({ id: conversations.id });
+  return rows.length > 0;
 }

@@ -57,6 +57,8 @@ export type ConversationDTO = {
   closedAt: string | null;
   version: number;
   agentBusy: boolean;
+  /** Who is typing right now (signals younger than TYPING_TTL_MS). */
+  typing: { employee: boolean; analyst: boolean };
 };
 
 export type MessagePageDTO = {

@@ -79,6 +79,13 @@ export async function serializeMessages(
   });
 }
 
+/** A typing signal stays valid this long; clients refresh it every ~3 s while typing. */
+export const TYPING_TTL_MS = 6_000;
+
+function typingNow(at: Date | null, now: number): boolean {
+  return !!at && now - at.getTime() < TYPING_TTL_MS;
+}
+
 export async function serializeConversation(
   executor: Executor,
   conversation: ConversationRow,
@@ -121,5 +128,15 @@ export async function serializeConversation(
     closedAt: conversation.closedAt?.toISOString() ?? null,
     version: conversation.version,
     agentBusy: busy,
+    typing: {
+      // Only meaningful while a person is on the other side.
+      employee:
+        conversation.state !== "closed" &&
+        conversation.state !== "agent_active" &&
+        typingNow(conversation.employeeTypingAt, Date.now()),
+      analyst:
+        conversation.state === "analyst_active" &&
+        typingNow(conversation.analystTypingAt, Date.now()),
+    },
   };
 }

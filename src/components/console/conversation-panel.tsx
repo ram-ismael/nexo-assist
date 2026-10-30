@@ -23,6 +23,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { Composer } from "@/components/chat/composer";
 import { MessageList } from "@/components/chat/message-list";
+import { TypingIndicator } from "@/components/chat/typing-indicator";
+import { useTypingSignal } from "@/components/chat/use-typing-signal";
 import type { useFeed } from "./use-feed";
 
 type Feed = ReturnType<typeof useFeed>;
@@ -56,6 +58,7 @@ export function ConversationPanel({
   const state = conversation?.state;
   const mine = state === "analyst_active" && conversation?.assignedAnalyst?.id === analystId;
   const other = state === "analyst_active" && !mine;
+  const typingSignal = useTypingSignal(conversation?.id, mine);
 
   const visibleMessages = useMemo<MessageDTO[]>(() => {
     const needle = term.trim().toLowerCase();
@@ -258,6 +261,13 @@ export function ConversationPanel({
         onLoadOlder={feed.loadOlder}
         handlersFor={() => ({ onChanged: () => undefined })}
         outgoing={outgoing}
+        typing={
+          term ? null : conversation.typing.employee ? (
+            <TypingIndicator name={firstName ?? "Funcionário"} align="left" tone="paper" />
+          ) : state === "agent_active" && conversation.agentBusy ? (
+            <TypingIndicator name="Nexo Assist" align="right" tone="agent" />
+          ) : null
+        }
         empty={
           <p className="text-ink-3 py-10 text-center text-[14px]">
             {term ? "Nenhuma mensagem encontrada." : "Sem mensagens ainda."}
@@ -292,6 +302,7 @@ export function ConversationPanel({
               variant="console"
               maxLength={4000}
               busy={outgoing !== null}
+              typing={typingSignal}
               onSend={reply}
             />
           </>

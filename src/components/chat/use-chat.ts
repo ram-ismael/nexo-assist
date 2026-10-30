@@ -39,6 +39,15 @@ type StreamEvent =
     };
 
 const POLL_MS = 3500;
+// With a person on the other side, poll faster so replies and "está
+// escrevendo…" show up within ~2 s.
+const HUMAN_POLL_MS = 2000;
+
+function pollInterval(conversation: ConversationDTO | null): number {
+  return conversation?.state === "waiting_analyst" || conversation?.state === "analyst_active"
+    ? HUMAN_POLL_MS
+    : POLL_MS;
+}
 
 /** Merge by seq and drop duplicates: polling, streaming and paging can overlap. */
 export function mergeMessages(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] {
@@ -64,6 +73,9 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
   // A message whose fate is unknown (network dropped before any answer) is
   // resent with the same client id, so the server stores and answers it once.
   const unconfirmed = useRef<{ text: string; clientId: string } | null>(null);
+  // Turns this tab watched stream in: their final message replaces the live
+  // bubble in place instead of animating in a second time.
+  const streamedTurns = useRef(new Set<string>());
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const conversationRef = useRef(conversation);
@@ -94,9 +106,9 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       if (document.visibilityState === "visible") await sync();
-      timer = setTimeout(tick, POLL_MS);
+      timer = setTimeout(tick, pollInterval(conversationRef.current));
     };
-    timer = setTimeout(tick, POLL_MS);
+    timer = setTimeout(tick, pollInterval(conversationRef.current));
     const onVisible = () => {
       if (document.visibilityState === "visible") void sync();
     };
@@ -159,6 +171,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
         setPending((value) => (value ? { ...value, reply: value.reply + event.delta } : value));
         break;
       case "done":
+        if (event.message?.turnId) streamedTurns.current.add(event.message.turnId);
         setConversation(event.conversation);
         if (event.message)
           setMessages((list) => mergeMessages(list, [event.message as MessageDTO]));
@@ -295,8 +308,14 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
     setFailure(null);
   }, []);
 
+  const streamedInPlace = useCallback(
+    (message: MessageDTO) => !!message.turnId && streamedTurns.current.has(message.turnId),
+    [],
+  );
+
   return {
     conversation,
+    streamedInPlace,
     setConversation,
     messages,
     hasMoreBefore,

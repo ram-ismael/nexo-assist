@@ -10,6 +10,7 @@ import {
   pageMessages,
 } from "@/server/conversations/repository";
 import { listQueue, queueCounts } from "@/server/conversations/queue";
+import { serializeConversation } from "@/server/conversations/serialize";
 import {
   claimConversation,
   closeConversation,
@@ -17,6 +18,7 @@ import {
   employeeRequestsAnalyst,
   postAnalystMessage,
   returnToAgent,
+  signalTyping,
 } from "@/server/conversations/use-cases";
 import { createTicketDraft, editDraft, findDraftForEmployee } from "@/server/tickets/drafts";
 import { ANA, calendar, CARLA, MARINA, RAFAEL, resetDatabase, sessionUser } from "../support/db";
@@ -180,6 +182,53 @@ describe("conversation lifecycle", () => {
     });
     const all = await listQueue(db(), rafael.id, { filter: "all", query: "" });
     expect(all.map((item) => item.id).sort()).toEqual([conversation.id, recent.id].sort());
+  });
+
+  it("accepts typing signals only from the people in the conversation", async () => {
+    const ana = await sessionUser(ANA);
+    const carla = await sessionUser(CARLA);
+    const rafael = await sessionUser(RAFAEL);
+    const marina = await sessionUser(MARINA);
+    const live = await getOrCreateLiveConversation(db(), ana.id);
+    // With the agent there is nobody to tell.
+    expect(await signalTyping(ana, live.id, true)).toBe(false);
+
+    await employeeRequestsAnalyst(ana, live.id);
+    expect(await signalTyping(carla, live.id, true)).toBe(false);
+    expect(await signalTyping(rafael, live.id, true)).toBe(false);
+    expect(await signalTyping(ana, live.id, true)).toBe(true);
+    let stored = await findConversation(db(), live.id);
+    if (!stored) throw new Error("conversation missing");
+    expect((await serializeConversation(db(), stored, 30)).typing).toEqual({
+      employee: true,
+      analyst: false,
+    });
+
+    await claimConversation(rafael, live.id);
+    expect(await signalTyping(marina, live.id, true)).toBe(false);
+    expect(await signalTyping(rafael, live.id, true)).toBe(true);
+    stored = await findConversation(db(), live.id);
+    if (!stored) throw new Error("conversation missing");
+    expect((await serializeConversation(db(), stored, 30)).typing.analyst).toBe(true);
+
+    // The message itself ends the indicator, in the same commit.
+    await postAnalystMessage(rafael, live.id, { clientId: "typing-clears-1", text: "Oi, Ana!" });
+    stored = await findConversation(db(), live.id);
+    if (!stored) throw new Error("conversation missing");
+    expect((await serializeConversation(db(), stored, 30)).typing.analyst).toBe(false);
+    expect(stored.analystTypingAt).toBeNull();
+  });
+
+  it("lets a typing signal expire on its own", async () => {
+    const { ana, conversation } = await waitingConversation();
+    await signalTyping(ana, conversation.id, true);
+    await db()
+      .update(conversations)
+      .set({ employeeTypingAt: new Date(Date.now() - 10_000) })
+      .where(eq(conversations.id, conversation.id));
+    const stored = await findConversation(db(), conversation.id);
+    if (!stored) throw new Error("conversation missing");
+    expect((await serializeConversation(db(), stored, 30)).typing.employee).toBe(false);
   });
 
   it("shows waiting conversations in the analyst queue with the transfer reason", async () => {

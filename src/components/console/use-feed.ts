@@ -6,6 +6,9 @@ import { api, ApiRequestError, errorMessage } from "@/lib/api-client";
 import { mergeMessages } from "@/components/chat/use-chat";
 
 const POLL_MS = 3000;
+// While a person is on the employee side of the conversation, poll faster so
+// messages and "está escrevendo…" show up within ~2 s.
+const HUMAN_POLL_MS = 2000;
 
 /**
  * Messages of one conversation for the console: latest page first, older
@@ -62,10 +65,22 @@ export function useFeed(conversationId: string) {
     }
   }, [conversationId]);
 
+  const stateRef = useRef<ConversationDTO["state"] | undefined>(undefined);
+  useLayoutEffect(() => {
+    stateRef.current = conversation?.state;
+  }, [conversation?.state]);
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void sync();
-    }, POLL_MS);
+    let timer: ReturnType<typeof setTimeout>;
+    const interval = () =>
+      stateRef.current === "analyst_active" || stateRef.current === "waiting_analyst"
+        ? HUMAN_POLL_MS
+        : POLL_MS;
+    const tick = async () => {
+      if (document.visibilityState === "visible") await sync();
+      timer = setTimeout(tick, interval());
+    };
+    timer = setTimeout(tick, interval());
     // Catch up at once when the tab comes back or the network returns.
     const onVisible = () => {
       if (document.visibilityState === "visible") void sync();
@@ -74,7 +89,7 @@ export function useFeed(conversationId: string) {
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
     return () => {
-      clearInterval(timer);
+      clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };

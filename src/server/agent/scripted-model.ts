@@ -240,9 +240,12 @@ export function createScriptedModel(): LanguageModelV4 {
     if (!step || step.kind === "text") {
       const content = step ? step.text(toolResults(options.prompt, index + 1)) : "";
       const id = `text-${(counter += 1)}`;
+      // Word-sized deltas like a real provider, so the streaming path (and the
+      // live bubble in the UI) is exercised the same way. No delays are added.
+      const deltas = content.match(/\S+\s*|\s+/g) ?? [];
       parts.push(
         { type: "text-start", id },
-        { type: "text-delta", id, delta: content },
+        ...deltas.map((delta) => ({ type: "text-delta" as const, id, delta })),
         { type: "text-end", id },
       );
       parts.push({ type: "finish", usage, finishReason: { unified: "stop", raw: "stop" } });

@@ -117,6 +117,10 @@ export async function appendMessage(
       lastMessageKind: input.kind,
       lastActivityAt: now,
       updatedAt: now,
+      // The message itself ends the "está escrevendo…" of whoever sent it,
+      // in the same commit, so the indicator never outlives the message.
+      ...(input.kind === "employee" ? { employeeTypingAt: null } : {}),
+      ...(input.kind === "analyst" ? { analystTypingAt: null } : {}),
     })
     .where(eq(conversations.id, input.conversationId));
   const inserted = await executor
