@@ -31,7 +31,8 @@ function LiveCard({ live, timeZone }: { live: LiveShowcase | null; timeZone: str
   return (
     <section
       aria-label="Agora no service desk"
-      className="mt-12 hidden max-w-[470px] self-center rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:block lg:ml-24 lg:self-start"
+      // Reference T1: about 80% of the title's width, ending just inside its right edge.
+      className="mt-12 hidden w-[80%] self-end rounded-2xl border border-white/10 bg-white/[0.04] p-5 [contain:inline-size] sm:mr-[3%] sm:block"
     >
       <p className="flex items-center justify-between gap-3 text-[13px]">
         <span className="inline-flex items-center gap-2 font-medium text-white/90">
@@ -133,15 +134,20 @@ export function LoginShowcase({
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 flex-col justify-center py-12 lg:py-0">
         <p className="text-[15px] text-white/65">Service desk de TI da Nexo</p>
-        <h2 className="font-display mt-4 max-w-[720px] text-[42px] leading-[1.1] font-normal tracking-[-0.015em] text-white sm:text-[52px] 2xl:text-[64px]">
-          Seu problema de TI, resolvido em uma conversa.
-        </h2>
-        <p className="mt-6 max-w-[520px] text-[17px] leading-relaxed text-white/65">
-          Descreva o que está acontecendo. O assistente consulta seus chamados, busca na central de
-          ajuda e chama um analista quando precisa.
-        </p>
+        {/* As wide as the title's longest line (the description and the card opt out of
+            sizing it with contain: inline-size), so the card can end where the title ends. */}
+        <div className="flex w-fit max-w-full flex-col">
+          <h2 className="font-display mt-4 text-[42px] leading-[1.1] font-normal tracking-[-0.015em] text-white sm:text-[52px] 2xl:text-[64px]">
+            Seu problema de TI, resolvido
+            <br className="max-sm:hidden" /> em uma conversa.
+          </h2>
+          <p className="mt-6 max-w-[80%] text-[17px] leading-relaxed text-white/65 [contain:inline-size] max-sm:max-w-none">
+            Descreva o que está acontecendo. O assistente consulta seus chamados, busca na central
+            de ajuda e chama um analista quando precisa.
+          </p>
 
-        <LiveCard live={live} timeZone={timeZone} />
+          <LiveCard live={live} timeZone={timeZone} />
+        </div>
       </div>
 
       <dl className="grid grid-cols-1 gap-6 border-t border-white/10 pt-8 sm:grid-cols-3 sm:gap-0">
