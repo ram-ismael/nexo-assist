@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, CheckCheck, Headset } from "lucide-react";
+import { ArrowDown, Check, CheckCheck, Headset } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { MessageDTO } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
@@ -173,10 +173,13 @@ function ConsoleViewMessage({
   message,
   timeZone,
   grouped,
+  read,
 }: {
   message: MessageDTO;
   timeZone: string;
   grouped: boolean;
+  /** Reached the employee's open chat: ✓✓ blue; otherwise ✓ grey (sent). */
+  read: boolean;
 }) {
   const noop: BlockHandlers = { onChanged: () => undefined };
   if (message.kind === "system") return <SystemLine message={message} timeZone={timeZone} />;
@@ -234,7 +237,11 @@ function ConsoleViewMessage({
           <InlineBlocks message={message} handlers={noop} />
           <p className="text-ink-4 mt-1 flex items-center justify-end gap-1 text-[12px]">
             {formatTime(message.createdAt, timeZone)}
-            <CheckCheck className="text-primary size-3.5" aria-label="entregue" />
+            {read ? (
+              <CheckCheck className="text-primary size-3.5" aria-label="lida" />
+            ) : (
+              <Check className="text-ink-4 size-3.5" aria-label="enviada" />
+            )}
           </p>
         </div>
       ) : null}
@@ -322,6 +329,7 @@ export function MessageList({
   outgoing,
   inPlace,
   typing,
+  readUpTo = 0,
   empty,
   footer,
 }: {
@@ -341,6 +349,8 @@ export function MessageList({
   inPlace?: (message: MessageDTO) => boolean;
   /** "Está escrevendo…" bubble, shown after the last message. */
   typing?: ReactNode;
+  /** Console: the employee's chat has received messages up to this seq (✓✓). */
+  readUpTo?: number;
   empty?: ReactNode;
   footer?: ReactNode;
 }) {
@@ -494,7 +504,12 @@ export function MessageList({
                       followed={followed}
                     />
                   ) : (
-                    <ConsoleViewMessage message={message} timeZone={timeZone} grouped={grouped} />
+                    <ConsoleViewMessage
+                      message={message}
+                      timeZone={timeZone}
+                      grouped={grouped}
+                      read={message.seq <= readUpTo}
+                    />
                   )}
                 </div>
               </Fragment>

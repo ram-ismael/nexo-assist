@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { config } from "@/lib/config";
 import type { SessionUser } from "@/server/auth/sessions";
 import { db } from "@/server/db/client";
-import { auditEvents, conversations, handoffs } from "@/server/db/schema";
+import { auditEvents, conversations, handoffs, messages } from "@/server/db/schema";
 import { AppError, conflict, notFound } from "@/server/errors";
 import { callTicketService } from "@/server/tickets/gateway";
 import { confirmDraft, confirmationText } from "@/server/tickets/drafts";
@@ -313,14 +313,19 @@ export async function signalTyping(
 }
 
 /**
- * The employee's chat is open and visible (it is polling): record it for the
- * console's "online". Written at most every 10 s per conversation, so polling
- * does not turn into a write per request.
+ * The employee's chat is open and visible (it only polls then): record it for
+ * the console's "online" / "visto por último" and mark everything in the
+ * conversation as read ("lida", ✓✓). Presence is written at most every 10 s;
+ * the read mark moves as soon as there is something new to mark.
  */
 export async function touchEmployeePresence(employeeId: string, conversationId: string) {
+  const latest = sql`(select coalesce(max(seq), 0) from ${messages} where conversation_id = ${conversationId})`;
   await db()
     .update(conversations)
-    .set({ employeeSeenAt: new Date() })
+    .set({
+      employeeSeenAt: new Date(),
+      employeeReadSeq: sql`greatest(${conversations.employeeReadSeq}, ${latest})`,
+    })
     .where(
       and(
         eq(conversations.id, conversationId),
@@ -328,6 +333,7 @@ export async function touchEmployeePresence(employeeId: string, conversationId: 
         or(
           isNull(conversations.employeeSeenAt),
           lt(conversations.employeeSeenAt, sql`now() - interval '10 seconds'`),
+          lt(conversations.employeeReadSeq, latest),
         ),
       ),
     );

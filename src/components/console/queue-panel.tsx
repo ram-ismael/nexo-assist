@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCheck, Search, WifiOff } from "lucide-react";
+import { Check, CheckCheck, Search, WifiOff } from "lucide-react";
 import type { QueueItemDTO, QueueResponseDTO } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 import { useEffect, useState, type ReactNode } from "react";
@@ -305,13 +305,28 @@ export function QueuePanel({
                       <span className="text-ink-2 flex min-w-0 flex-1 items-center gap-1 truncate text-[14px]">
                         {item.employeeTyping ? (
                           <span className="text-success-text truncate italic">digitando…</span>
-                        ) : item.lastMessageKind === "agent" ? (
+                        ) : item.lastMessageKind === "agent" ||
+                          item.lastMessageKind === "analyst" ? (
                           <>
-                            <CheckCheck
-                              className="text-primary size-3.5 shrink-0"
-                              aria-hidden="true"
-                            />
-                            <span className="truncate">Nexo: {item.lastMessagePreview}</span>
+                            {item.lastMessageRead ? (
+                              <CheckCheck
+                                className="text-primary size-3.5 shrink-0"
+                                aria-label="lida"
+                              />
+                            ) : (
+                              <Check
+                                className="text-ink-4 size-3.5 shrink-0"
+                                aria-label="enviada"
+                              />
+                            )}
+                            <span className="truncate">
+                              {item.lastMessageKind === "agent"
+                                ? "Nexo: "
+                                : item.assignedAnalyst?.id === analystId
+                                  ? "Você: "
+                                  : `${item.assignedAnalyst?.name.split(" ")[0] ?? "Analista"}: `}
+                              {item.lastMessagePreview}
+                            </span>
                           </>
                         ) : (
                           <span className="truncate">

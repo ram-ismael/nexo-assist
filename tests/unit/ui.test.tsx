@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mergeMessages } from "@/components/chat/use-chat";
 import { TicketCard } from "@/components/tickets/ticket-card";
 import type { MessageDTO, TicketSnapshot } from "@/lib/api-types";
-import { contactLabel, durationLabel, formatListTime, untilLabel } from "@/lib/format";
+import {
+  contactLabel,
+  durationLabel,
+  formatListTime,
+  lastSeenLabel,
+  untilLabel,
+} from "@/lib/format";
 
 afterEach(cleanup);
 
@@ -95,5 +101,18 @@ describe("durationLabel", () => {
     expect(durationLabel(4 * 3_600_000)).toBe("4 h");
     expect(durationLabel(26 * 3_600_000)).toBe("1 dia");
     expect(durationLabel(6 * 86_400_000)).toBe("6 dias");
+  });
+});
+
+describe("lastSeenLabel", () => {
+  const now = new Date("2026-10-30T13:00:00.000Z"); // 10:00 in São Paulo
+  const tz = "America/Sao_Paulo";
+  it("reads like a messaging app", () => {
+    expect(lastSeenLabel("2026-10-30T12:42:00.000Z", tz, now)).toBe(
+      "visto por último hoje às 09:42",
+    );
+    expect(lastSeenLabel("2026-10-29T21:20:00.000Z", tz, now)).toBe(
+      "visto por último ontem às 18:20",
+    );
   });
 });
