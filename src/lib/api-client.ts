@@ -50,12 +50,22 @@ export async function api<T>(
     throw new ApiRequestError(0, "offline", OFFLINE_MESSAGE);
   }
   if (response.status === 401 && typeof window !== "undefined" && !path.startsWith("/api/auth/")) {
-    // Full reload on purpose: drops every client cache tied to the expired session.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/entrar?expirada=1");
+    return signedOut();
   }
   if (!response.ok) throw await parseError(response);
   return (await response.json()) as T;
+}
+
+/**
+ * The session is gone (expired or revoked): the server already cleared the
+ * cookie, so go straight to the login. Full reload on purpose: it drops every
+ * client cache tied to the old session. The promise never settles, so no caller
+ * flashes an error toast while the page unloads.
+ */
+export function signedOut(): Promise<never> {
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign("/entrar");
+  return new Promise<never>(() => undefined);
 }
 
 export function newClientId(): string {

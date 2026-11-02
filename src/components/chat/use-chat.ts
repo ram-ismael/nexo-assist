@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
-import { api, ApiRequestError, newClientId, parseError } from "@/lib/api-client";
+import { api, ApiRequestError, newClientId, parseError, signedOut } from "@/lib/api-client";
 
 export type LiveAction = {
   id: string;
@@ -19,7 +19,10 @@ export type PendingTurn = {
   toAgent: boolean;
   accepted: boolean;
   actions: LiveAction[];
+  /** Every token received so far; the bubble reveals it at a reading pace. */
   reply: string;
+  /** The server finished: the message lands once the bubble shows all of `reply`. */
+  finished: boolean;
 };
 
 export type TurnFailure = { message: string; retryable: boolean; messageId: string | null };
@@ -76,6 +79,12 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
   // Turns this tab watched stream in: their final message replaces the live
   // bubble in place instead of animating in a second time.
   const streamedTurns = useRef(new Set<string>());
+  // The finished answer, held until the live bubble has revealed all of it.
+  const landing = useRef<{
+    message: MessageDTO | null;
+    conversation: ConversationDTO;
+    landed: () => void;
+  } | null>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const conversationRef = useRef(conversation);
@@ -145,51 +154,91 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
     }
   }, [loadingOlder]);
 
-  const handleEvent = useCallback((event: StreamEvent, clientId: string) => {
-    switch (event.type) {
-      case "accepted":
-        setConversation(event.conversation);
-        setMessages((list) => mergeMessages(list, [event.userMessage]));
-        setPending((value) =>
-          value && value.clientId === clientId ? { ...value, accepted: true } : value,
-        );
-        break;
-      case "action":
-        setPending((value) => {
-          if (!value) return value;
-          const others = value.actions.filter((action) => action.id !== event.id);
-          return {
-            ...value,
-            actions: [
-              ...others,
-              { id: event.id, tool: event.tool, label: event.label, status: event.status },
-            ],
-          };
-        });
-        break;
-      case "text":
-        setPending((value) => (value ? { ...value, reply: value.reply + event.delta } : value));
-        break;
-      case "done":
-        if (event.message?.turnId) streamedTurns.current.add(event.message.turnId);
-        setConversation(event.conversation);
-        if (event.message)
-          setMessages((list) => mergeMessages(list, [event.message as MessageDTO]));
-        setPending(null);
-        break;
-      case "error":
-        if (event.conversation) setConversation(event.conversation);
-        if (event.notice) setMessages((list) => mergeMessages(list, [event.notice as MessageDTO]));
-        setPending(null);
-        setFailure({
-          message: event.message,
-          retryable: event.retryable,
-          messageId:
-            messagesRef.current.filter((message) => message.kind === "employee").at(-1)?.id ?? null,
-        });
-        break;
-    }
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+
+  /** Swaps the live bubble for the stored answer (same shape, no second entrance). */
+  const land = useCallback(() => {
+    const done = landing.current;
+    if (!done) return;
+    landing.current = null;
+    setConversation(done.conversation);
+    if (done.message) setMessages((list) => mergeMessages(list, [done.message as MessageDTO]));
+    setPending(null);
+    done.landed();
   }, []);
+
+  /** Resolves once the finished answer is on screen (immediately if there is none). */
+  const untilLanded = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        const done = landing.current;
+        if (!done) return resolve();
+        // Never hold the conversation hostage to an animation (hidden tab, no frames).
+        const fallback = setTimeout(land, 8_000);
+        done.landed = () => {
+          clearTimeout(fallback);
+          resolve();
+        };
+      }),
+    [land],
+  );
+
+  const handleEvent = useCallback(
+    (event: StreamEvent, clientId: string) => {
+      switch (event.type) {
+        case "accepted":
+          setConversation(event.conversation);
+          setMessages((list) => mergeMessages(list, [event.userMessage]));
+          setPending((value) =>
+            value && value.clientId === clientId ? { ...value, accepted: true } : value,
+          );
+          break;
+        case "action":
+          setPending((value) => {
+            if (!value) return value;
+            const others = value.actions.filter((action) => action.id !== event.id);
+            return {
+              ...value,
+              actions: [
+                ...others,
+                { id: event.id, tool: event.tool, label: event.label, status: event.status },
+              ],
+            };
+          });
+          break;
+        case "text":
+          setPending((value) => (value ? { ...value, reply: value.reply + event.delta } : value));
+          break;
+        case "done":
+          if (event.message?.turnId) streamedTurns.current.add(event.message.turnId);
+          landing.current = {
+            message: event.message,
+            conversation: event.conversation,
+            landed: () => undefined,
+          };
+          // A streamed answer lands when the bubble finishes revealing it (see
+          // `revealed`); one without text (only cards) lands right away.
+          setPending((value) => (value?.reply ? { ...value, finished: true } : value));
+          if (!pendingRef.current?.reply) land();
+          break;
+        case "error":
+          if (event.conversation) setConversation(event.conversation);
+          if (event.notice)
+            setMessages((list) => mergeMessages(list, [event.notice as MessageDTO]));
+          setPending(null);
+          setFailure({
+            message: event.message,
+            retryable: event.retryable,
+            messageId:
+              messagesRef.current.filter((message) => message.kind === "employee").at(-1)?.id ??
+              null,
+          });
+          break;
+      }
+    },
+    [land],
+  );
 
   /** Returns false when the message was not accepted, so the composer keeps the text. */
   const send = useCallback(
@@ -209,6 +258,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
         accepted: false,
         actions: [],
         reply: "",
+        finished: false,
       });
       try {
         let response: Response;
@@ -231,9 +281,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
             "Sem conexão. Sua mensagem não foi enviada; tente de novo.",
           );
         }
-        // Full reload on purpose: drops every client cache tied to the expired session.
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-        if (response.status === 401) window.location.assign("/entrar?expirada=1");
+        if (response.status === 401) return signedOut();
         if (!response.ok) throw await parseError(response);
         const type = response.headers.get("content-type") ?? "";
         if (type.includes("application/json")) {
@@ -267,6 +315,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
             newline = buffer.indexOf("\n");
           }
         }
+        await untilLanded();
         // Tools may have appended events during the turn (e.g. the transfer
         // line); pull them now instead of waiting for the next poll.
         streaming.current = false;
@@ -297,7 +346,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
         streaming.current = false;
       }
     },
-    [handleEvent, sync],
+    [handleEvent, sync, untilLanded],
   );
 
   const replaceConversation = useCallback((page: MessagePageDTO | null, next?: ConversationDTO) => {
@@ -315,6 +364,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
 
   return {
     conversation,
+    revealed: land,
     streamedInPlace,
     setConversation,
     messages,

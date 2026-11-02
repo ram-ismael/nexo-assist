@@ -1,7 +1,8 @@
 import { eq, inArray } from "drizzle-orm";
 import type { ConversationDTO, DraftDTO, MessageDTO } from "@/lib/api-types";
 import type { Executor } from "@/server/db/client";
-import { users } from "@/server/db/schema";
+import { analystOnline } from "@/domain/presence";
+import { analystPresence, users } from "@/server/db/schema";
 import {
   countEmployeeMessages,
   hasRunningTurn,
@@ -112,7 +113,7 @@ export async function serializeConversation(
   const ids = [conversation.employeeId, conversation.assignedAnalystId].filter(
     (id): id is string => !!id,
   );
-  const [people, busy, sent] = await Promise.all([
+  const [people, presence, busy, sent] = await Promise.all([
     executor
       .select({
         id: users.id,
@@ -123,6 +124,16 @@ export async function serializeConversation(
       })
       .from(users)
       .where(ids.length === 1 ? eq(users.id, conversation.employeeId) : inArray(users.id, ids)),
+    conversation.assignedAnalystId
+      ? executor
+          .select({
+            lastHeartbeatAt: analystPresence.lastHeartbeatAt,
+            leftAt: analystPresence.leftAt,
+          })
+          .from(analystPresence)
+          .where(eq(analystPresence.analystId, conversation.assignedAnalystId))
+          .then((rows) => rows[0] ?? null)
+      : null,
     hasRunningTurn(executor, conversation.id),
     countEmployeeMessages(executor, conversation.id),
   ]);
@@ -135,7 +146,13 @@ export async function serializeConversation(
     sessionMessageCount: sent,
     sessionMessageLimit,
     assignedAnalyst: analyst
-      ? { id: analyst.id, name: analyst.name, supportLevel: analyst.supportLevel }
+      ? {
+          id: analyst.id,
+          name: analyst.name,
+          supportLevel: analyst.supportLevel,
+          online: !!presence && analystOnline(presence),
+          lastSeenAt: presence?.lastHeartbeatAt.toISOString() ?? null,
+        }
       : null,
     employee: {
       id: employee.id,

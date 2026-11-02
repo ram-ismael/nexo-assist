@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type z } from "zod";
 import { getCurrentUser } from "@/server/auth/current-user";
-import type { SessionUser } from "@/server/auth/sessions";
+import { SESSION_COOKIE, type SessionUser } from "@/server/auth/sessions";
 import { AppError, type ApiErrorBody } from "@/server/errors";
 import { errorFields, log } from "@/server/log";
 
@@ -107,6 +107,15 @@ export function route<A extends Access, P = Record<string, never>>(
       return response;
     } catch (error) {
       const response = errorResponse(error, requestId);
+      // A dead session cookie is useless: clear it so the browser stops sending it.
+      if (
+        access !== "public" &&
+        error instanceof AppError &&
+        error.code === "unauthenticated" &&
+        req.cookies.has(SESSION_COOKIE)
+      ) {
+        response.cookies.delete(SESSION_COOKIE);
+      }
       log(response.status >= 500 ? "error" : "info", "request failed", {
         requestId,
         method: req.method,

@@ -25,6 +25,7 @@ export function useFeed(conversationId: string) {
   const [olderError, setOlderError] = useState<string | null>(null);
   /** False while incremental sync is failing; the panel says the view may be stale. */
   const [connected, setConnected] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   const messagesRef = useRef<MessageDTO[]>([]);
 
   useLayoutEffect(() => {
@@ -45,7 +46,14 @@ export function useFeed(conversationId: string) {
     return () => {
       active = false;
     };
-  }, [conversationId]);
+  }, [conversationId, attempt]);
+
+  /** Retries the first page after it failed to load. */
+  const reload = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    setAttempt((value) => value + 1);
+  }, []);
 
   const sync = useCallback(async () => {
     const last = messagesRef.current[messagesRef.current.length - 1]?.seq ?? 0;
@@ -71,6 +79,8 @@ export function useFeed(conversationId: string) {
   }, [conversation?.state]);
 
   useEffect(() => {
+    // Incremental sync only makes sense once the first page is on screen.
+    if (loading || error) return;
     let timer: ReturnType<typeof setTimeout>;
     const interval = () =>
       stateRef.current === "analyst_active" || stateRef.current === "waiting_analyst"
@@ -93,7 +103,7 @@ export function useFeed(conversationId: string) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [sync]);
+  }, [sync, loading, error]);
 
   const loadOlder = useCallback(async () => {
     const first = messagesRef.current[0];
@@ -128,6 +138,7 @@ export function useFeed(conversationId: string) {
     olderError,
     connected,
     loadOlder,
+    reload,
     sync,
     add,
   };

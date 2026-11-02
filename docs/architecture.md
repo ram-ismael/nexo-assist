@@ -60,7 +60,7 @@ Regras que valem para o código todo:
 | `agent_actions`      | Cada execução de ferramenta: entrada, saída, resumo, duração, status                                  |
 | `agent_decisions`    | Decisão do turno: intenção, entendimento, ação, segurança, motivo, regras                             |
 | `knowledge_articles` | Artigos da central (texto normalizado + índice GIN full-text em português)                            |
-| `analyst_presence`   | Disponibilidade e heartbeat dos analistas                                                             |
+| `analyst_presence`   | Disponibilidade, heartbeat e saída (`left_at`) dos analistas: "Online" / "Offline há 5 min"           |
 | `audit_events`       | Auditoria de login, confirmações, transferências e ações do analista                                  |
 | `rate_limits`        | Contadores por janela, compartilhados entre instâncias                                                |
 
@@ -86,8 +86,10 @@ Para ligar a um service desk corporativo (ServiceNow, Jira SM, GLPI...):
 
 ## Tempo real
 
-- Resposta do agent: streaming NDJSON da própria requisição (`POST /api/chat`).
-- Demais atualizações: polling incremental por cursor (`?after=<seq>`), 3 s no chat e na conversa aberta do console, 5 s na fila, pausado com a aba oculta. Nenhum estado em memória é compartilhado entre instâncias.
+- Resposta do agent: streaming NDJSON da própria requisição (`POST /api/chat`) com os tokens reais do modelo. O cliente mostra os pontinhos assim que a mensagem sai, a trilha de ferramentas enquanto elas rodam e revela o texto num ritmo de leitura (acelera quando o modelo está à frente); a mensagem gravada só substitui a bolha quando a revelação termina.
+- Demais atualizações: polling incremental por cursor (`?after=<seq>`), 2 s com uma pessoa do outro lado e 3–3,5 s com o agent, 5 s na fila, pausado com a aba oculta e retomado ao voltar a aba ou a rede. Cada resposta traz o estado autorizado da conversa (dono, analista, digitação, presença, turno em andamento), então reconexão é só pedir de novo a partir do último `seq`. No console, cada mensagem ou mudança de estado recarrega na hora o painel de chamados e o resumo da conversa.
+- Presença: o chat do funcionário marca `employee_seen_at` a cada poll visível; o console envia heartbeat a cada 15 s e `leaving` ao fechar a aba (e o logout grava `left_at`). Online = heartbeat com menos de 45 s e posterior à última saída.
+- Nenhum estado em memória é compartilhado entre instâncias: tudo vem do Postgres.
 
 ## Observabilidade
 

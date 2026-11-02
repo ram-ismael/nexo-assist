@@ -8,10 +8,11 @@ import { json, route } from "@/server/http";
 export const POST = route("public", async ({ user }) => {
   const jar = await cookies();
   if (user?.role === "analyst") {
-    // Signed out means not online, now; the availability preference itself is kept.
+    // Signed out means offline from now on; the availability preference itself is kept.
+    const now = new Date();
     await db()
       .update(analystPresence)
-      .set({ lastHeartbeatAt: new Date(0) })
+      .set({ lastHeartbeatAt: now, leftAt: now })
       .where(eq(analystPresence.analystId, user.id));
   }
   await revokeSession(db(), jar.get(SESSION_COOKIE)?.value);

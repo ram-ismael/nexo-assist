@@ -387,6 +387,8 @@ export const analystPresence = pgTable("analyst_presence", {
     .references(() => users.id, { onDelete: "cascade" }),
   available: boolean("available").notNull().default(true),
   lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Signed out or closed the console; a later heartbeat means connected again. */
+  leftAt: timestamp("left_at", { withTimezone: true }),
 });
 
 export const auditEvents = pgTable(

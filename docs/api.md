@@ -70,4 +70,4 @@ Route Handlers em `src/app/api`, todos com o wrapper `route()` (`src/server/http
 | `POST /api/conversations/:id/return` | Devolver ao agent                                       |
 | `POST /api/conversations/:id/close`  | Encerrar                                                |
 | `POST /api/conversations/:id/read`   | Marca como lida                                         |
-| `GET/PUT /api/analysts/presence`     | Disponibilidade e heartbeat                             |
+| `GET/PUT /api/analysts/presence`     | Disponibilidade, heartbeat e `{ leaving: true }`        |
