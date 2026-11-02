@@ -12,12 +12,15 @@ describe("demo conversation history", () => {
   afterAll(closeDb);
 
   it("writes realistic histories once and never touches existing conversations", async () => {
-    expect(await seedConversations(db(), calendar)).toBe(6);
+    expect(await seedConversations(db(), calendar)).toBe(11);
     expect(await seedConversations(db(), calendar)).toBe(0);
 
     const rafael = await sessionUser(RAFAEL);
     const all = await listQueue(db(), rafael.id, { filter: "all", query: "" });
-    const byName = new Map(all.map((item) => [item.employee.name, item]));
+    // The queue lists live conversations before closed ones: keep each person's first.
+    const byName = new Map<string, (typeof all)[number]>();
+    for (const item of all)
+      if (!byName.has(item.employee.name)) byName.set(item.employee.name, item);
 
     expect(byName.get("Ana Souza")).toMatchObject({
       state: "waiting_analyst",
@@ -52,7 +55,7 @@ describe("demo conversation history", () => {
       ) ordered
       group by conversation_id
     `);
-    expect(result.rows.length).toBe(6);
+    expect(result.rows.length).toBe(11);
     expect(result.rows.filter((row) => !row.ok)).toEqual([]);
   });
 
@@ -62,6 +65,36 @@ describe("demo conversation history", () => {
     const [item] = await listEmployeeConversations(db(), fabio.id);
     expect(item?.topic).toBe("Preciso instalar o Power BI Desktop para um relatório.");
     expect(item?.lastMessagePreview).toContain("encerrado");
+  });
+
+  it("gives employees earlier conversations and opens requests only through confirmed drafts", async () => {
+    await seedConversations(db(), calendar);
+    const ana = await sessionUser("ana.souza@nexo.com.br");
+    const history = await listEmployeeConversations(db(), ana.id);
+    expect(history.map((item) => item.topic)).toEqual([
+      "Qual o status do meu chamado?",
+      "O Outlook do meu celular parou de sincronizar de novo.",
+    ]);
+
+    const requests = await db().execute<{ requester: string; title: string; status: string }>(sql`
+      select u.email as requester, t.title, d.status
+      from ticket_drafts d
+      join tickets t on t.id = d.result_ticket_id
+      join users u on u.id = t.requester_id
+      order by t.created_at
+    `);
+    expect(requests.rows).toEqual([
+      {
+        requester: "carla.mendes@nexo.com.br",
+        title: "Headset com microfone para reuniões com clientes",
+        status: "confirmed",
+      },
+      {
+        requester: "gabriela.rocha@nexo.com.br",
+        title: "Licença do Adobe Acrobat Pro para edição de contratos",
+        status: "confirmed",
+      },
+    ]);
   });
 
   it("keeps demo turns out of the public metrics", async () => {

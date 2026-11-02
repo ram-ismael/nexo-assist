@@ -354,12 +354,8 @@ const searchHelpCenter = nexoTool({
   label: "buscou na central de ajuda",
   run: async (input, turn) => {
     const hits = await searchKnowledge(db(), input.consulta, { deviceOs: turn.user.deviceOs });
-    if (hits.length > 0) {
-      turn.blocks.push({
-        type: "knowledge",
-        articles: hits.map((hit) => ({ id: hit.id, title: hit.title })),
-      });
-    }
+    // Shown as "Fontes" only if the answer is based on them (see knowledgeSources).
+    for (const hit of hits) turn.articlesFound.set(hit.id, hit.title);
     return {
       output: {
         dispositivo_do_funcionario: turn.user.deviceOs,
@@ -767,6 +763,13 @@ const recordDecision = nexoTool({
       .describe("Regras do service desk aplicadas"),
     informacoes_faltando: z.array(z.string().max(160)).max(5).default([]),
     motivo_da_transferencia: z.string().max(300).optional(),
+    artigos_usados: z
+      .array(z.string().max(20))
+      .max(5)
+      .default([])
+      .describe(
+        "IDs dos artigos da central em que a resposta se baseia (ex.: KB-001). Vazio se nenhum foi usado",
+      ),
   }),
   label: "registrou a decisão",
   hidden: true,
@@ -780,6 +783,7 @@ const recordDecision = nexoTool({
       rules: input.regras,
       missingInformation: input.informacoes_faltando,
       escalationReason: input.motivo_da_transferencia ?? null,
+      articlesUsed: input.artigos_usados.map((id) => id.trim().toUpperCase()),
     };
     return {
       output: { registrado: true },

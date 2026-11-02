@@ -356,7 +356,9 @@ export async function startNewConversation(employeeId: string, limit: number) {
       const exhausted = sent >= limit;
       if (locked.state !== "agent_active" && !exhausted) {
         throw conflict(
-          "Você está sendo atendido por um analista nesta conversa. Continue por ela.",
+          locked.state === "waiting_analyst"
+            ? "Sua conversa está na fila do service desk e um analista vai responder por ela. Continue por aqui."
+            : "Você está sendo atendido por um analista nesta conversa. Continue por ela.",
         );
       }
       if (sent === 0 && locked.state === "agent_active") return locked;

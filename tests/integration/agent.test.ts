@@ -89,11 +89,13 @@ describe("agent turns (scripted model, real tools and database)", () => {
     expect(before?.lastTurn).toBeNull();
     expect(before?.today).toEqual({ conversations: 0, tickets: 0, handoffs: 0 });
 
-    // Gabriela has no seeded conversation, so the assistant answers her.
+    // Demo history (including the requests it opens) never counts; real use does.
+    // Gabriela's seeded conversation is still with the assistant, so it answers her.
     const gabriela = await sessionUser("gabriela.rocha@nexo.com.br");
     await say(gabriela, "Qual o status do meu chamado?");
     const after = await liveShowcase("America/Sao_Paulo");
     expect(after?.lastTurn?.steps.length).toBeGreaterThan(0);
+    expect(after?.lastTicket).toBeNull();
     expect(JSON.stringify(after)).not.toMatch(/INC-|REQ-|Gabriela|Rocha/);
     expect(after?.today.conversations).toBe(1);
 

@@ -57,6 +57,27 @@ function continues(previous: MessageDTO | undefined, message: MessageDTO): boole
 const NEAR_TOP_PX = 120;
 const NEAR_BOTTOM_PX = 160;
 
+/**
+ * Assistant and analyst text is plain, but a stray "**bold**" from the model
+ * shows as bold instead of literal asterisks.
+ */
+function Prose({ text }: { text: string }) {
+  const parts = text.split(/\*\*(.+?)\*\*/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <strong key={index} className="font-semibold">
+            {part}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function SystemLine({
   message,
   timeZone,
@@ -171,7 +192,7 @@ function EmployeeViewMessage({
         >
           {message.content ? (
             <p className="text-ink [overflow-wrap:anywhere] whitespace-pre-wrap">
-              {message.content}
+              <Prose text={message.content} />
             </p>
           ) : null}
           <InlineBlocks message={message} handlers={handlers} />
@@ -251,7 +272,9 @@ function ConsoleViewMessage({
             "max-w-[min(600px,90%)]",
           )}
         >
-          <p className="text-ink [overflow-wrap:anywhere] whitespace-pre-wrap">{message.content}</p>
+          <p className="text-ink [overflow-wrap:anywhere] whitespace-pre-wrap">
+            <Prose text={message.content} />
+          </p>
           <InlineBlocks message={message} handlers={noop} />
           <p className="text-ink-4 mt-1 flex items-center justify-end gap-1 text-[12px]">
             {formatTime(message.createdAt, timeZone)}

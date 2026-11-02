@@ -141,6 +141,7 @@ export async function liveShowcase(timeZone: string): Promise<LiveShowcase | nul
         select t.category::text as category, t.priority, t.sla_policy->>'label' as sla, d.updated_at as at
         from ticket_drafts d join tickets t on t.id = d.result_ticket_id
         where d.status = 'confirmed' and d.kind = 'create'
+          and d.conversation_id not in (select conversation_id from demo)
         order by d.updated_at desc limit 1
       )
       select
@@ -159,7 +160,8 @@ export async function liveShowcase(timeZone: string): Promise<LiveShowcase | nul
           where model <> ${DEMO_SEED_MODEL} and status = 'completed'
             and started_at >= (select start from day)) as conversations,
         (select count(*)::int from ticket_drafts
-          where status = 'confirmed' and kind = 'create' and updated_at >= (select start from day)) as tickets,
+          where status = 'confirmed' and kind = 'create' and updated_at >= (select start from day)
+            and conversation_id not in (select conversation_id from demo)) as tickets,
         (select count(*)::int from handoffs h
           where h.created_at >= (select start from day)
             and h.conversation_id not in (select conversation_id from demo)) as handoffs

@@ -8,14 +8,16 @@ import {
   type ConversationRow,
 } from "@/server/conversations/repository";
 import type { Executor } from "@/server/db/client";
+import type { Intent } from "@/server/agent/turn-context";
 import { DEMO_SEED_MODEL } from "@/server/db/demo";
 import * as schema from "@/server/db/schema";
 import type { MessageBlock } from "@/server/messages/blocks";
+import { confirmationText, confirmDraft, createTicketDraft } from "@/server/tickets/drafts";
 import { TicketService, ticketSnapshot, type TicketRow } from "@/server/tickets/service";
 
 type Action = { tool: string; label: string; summary: string; visible?: boolean };
 type Decision = {
-  intent: string;
+  intent: Intent;
   understanding: string;
   action: string;
   certainty: "alta" | "media" | "baixa";
@@ -222,6 +224,51 @@ class Story {
     );
   }
 
+  /** A draft the agent prepared, through the same rules as the real tool. */
+  async draft(
+    minutesAgo: number,
+    input: Omit<
+      Parameters<typeof createTicketDraft>[2],
+      "employeeId" | "conversationId" | "turnId"
+    >,
+  ) {
+    return createTicketDraft(
+      this.db,
+      this.calendar,
+      {
+        ...input,
+        employeeId: this.employeeId,
+        conversationId: this.conversation.id,
+        turnId: null,
+      },
+      this.at(minutesAgo),
+    );
+  }
+
+  /** The employee confirms on the card: the ticket is created and announced. */
+  async confirm(minutesAgo: number, draftId: string) {
+    const service = new TicketService(this.db, this.calendar);
+    const when = this.at(minutesAgo);
+    const { ticket, draft } = await confirmDraft(
+      this.db,
+      service,
+      { employeeId: this.employeeId, draftId },
+      when,
+    );
+    await appendMessage(
+      this.db,
+      {
+        conversationId: this.conversation.id,
+        kind: "agent",
+        senderId: null,
+        content: confirmationText(draft, ticket),
+        blocks: [{ type: "ticket_card", ticket: ticketSnapshot(ticket, when) }],
+      },
+      when,
+    );
+    return ticket;
+  }
+
   async markRead() {
     await this.db.execute(sql`
       update conversations set analyst_read_seq = coalesce(
@@ -272,16 +319,21 @@ export async function seedConversations(
   };
   const tz = calendar.timeZone;
   const rafael = person("rafael.lima@nexo.com.br");
+  const DAY = 24 * 60;
 
   let created = 0;
+  // Decided once, before writing: an employee with any conversation (real use)
+  // gets nothing, and one run may write several conversations for the others.
+  const withHistory = new Set(
+    (
+      await db
+        .selectDistinct({ employeeId: schema.conversations.employeeId })
+        .from(schema.conversations)
+    ).map((row) => row.employeeId),
+  );
   const story = async (email: string, startedMinutesAgo: number) => {
     const employee = person(email);
-    const existing = await db
-      .select({ id: schema.conversations.id })
-      .from(schema.conversations)
-      .where(eq(schema.conversations.employeeId, employee.id))
-      .limit(1);
-    if (existing.length > 0) return null;
+    if (withHistory.has(employee.id)) return null;
     const startedAt = new Date(now.getTime() - startedMinutesAgo * 60_000);
     const [conversation] = await db
       .insert(schema.conversations)
@@ -291,6 +343,214 @@ export async function seedConversations(
     created += 1;
     return new Story(db, calendar, now, conversation, employee.id);
   };
+
+  // Earlier conversations, already closed: what "Conversas anteriores" shows.
+  // They come first because an employee has at most one live conversation.
+
+  // Ana Souza, 6 days ago: a repeat of an old problem, solved by the article.
+  const anaEarlier = await story("ana.souza@nexo.com.br", 6 * DAY);
+  if (anaEarlier) {
+    const start = 6 * DAY;
+    const q1 = await anaEarlier.employee(
+      start,
+      "O Outlook do meu celular parou de sincronizar de novo.",
+    );
+    await anaEarlier.agent(start - 0.5, q1.seq, {
+      actions: [
+        {
+          tool: "consultar_meus_chamados",
+          label: "consultou seus chamados",
+          summary: "INC-19877 (Outlook não sincroniza no celular), encerrado",
+        },
+        {
+          tool: "buscar_central_de_ajuda",
+          label: "buscou na central de ajuda",
+          summary: "KB-006 Outlook não sincroniza no celular",
+        },
+      ],
+      decision: {
+        intent: "duvida",
+        understanding: "O Outlook do celular voltou a não sincronizar; já houve um chamado igual.",
+        action: "Passar o procedimento do artigo KB-006 antes de abrir chamado.",
+        certainty: "alta",
+        reason: "O artigo vale para Android e iOS e foi o que resolveu o INC-19877, já encerrado.",
+        rules: ["Dúvida comum é resolvida pela central antes de abrir chamado"],
+      },
+      text: 'Pelo artigo "Outlook não sincroniza no celular": remova a conta do aplicativo Outlook, atualize o app e adicione a conta de novo, aprovando o acesso no autenticador. Foi o mesmo procedimento do seu chamado anterior, o INC-19877.',
+      blocks: [
+        {
+          type: "knowledge",
+          articles: [{ id: "KB-006", title: "Outlook não sincroniza no celular" }],
+        },
+        {
+          type: "quick_replies",
+          question: null,
+          options: ["Resolveu", "Continua sem sincronizar"],
+        },
+      ],
+    });
+    const q2 = await anaEarlier.employee(start - 7, "Resolveu");
+    await anaEarlier.agent(start - 7.5, q2.seq, {
+      actions: [],
+      decision: {
+        intent: "outro",
+        understanding: "O procedimento do artigo resolveu.",
+        action: "Confirmar e encerrar sem abrir chamado.",
+        certainty: "alta",
+        reason: "Ana confirmou que voltou a sincronizar.",
+      },
+      text: "Ótimo! Se voltar a acontecer, me chame por aqui.",
+    });
+    await anaEarlier.close(start - 40, null);
+  }
+
+  // Bruno Tavares, 4 days ago: locked network account, solved by self-service.
+  const brunoEarlier = await story("bruno.tavares@nexo.com.br", 4 * DAY);
+  if (brunoEarlier) {
+    const start = 4 * DAY;
+    const q1 = await brunoEarlier.employee(
+      start,
+      "Troquei a senha da rede e agora minha conta está bloqueada.",
+    );
+    await brunoEarlier.agent(start - 0.5, q1.seq, {
+      actions: [
+        {
+          tool: "buscar_central_de_ajuda",
+          label: "buscou na central de ajuda",
+          summary: "KB-003 Senha da rede expirada ou conta bloqueada",
+        },
+      ],
+      decision: {
+        intent: "duvida",
+        understanding: "Conta da rede bloqueada depois de uma troca de senha.",
+        action: "Orientar o autoatendimento de senhas do artigo KB-003.",
+        certainty: "alta",
+        reason: "O autoatendimento resolve bloqueio de conta sem chamado (KB-003).",
+      },
+      text: 'Pelo artigo "Senha da rede expirada ou conta bloqueada": use o autoatendimento de senhas no Portal do Colaborador pelo celular, validando com o número cadastrado. Depois de redefinir, espere 15 minutos e entre de novo. Se não tiver celular cadastrado, eu abro um chamado de Acesso.',
+      blocks: [
+        {
+          type: "knowledge",
+          articles: [{ id: "KB-003", title: "Senha da rede expirada ou conta bloqueada" }],
+        },
+      ],
+    });
+    const q2 = await brunoEarlier.employee(start - 22, "Consegui pelo portal, já entrei. Valeu!");
+    await brunoEarlier.agent(start - 22.5, q2.seq, {
+      actions: [],
+      decision: {
+        intent: "outro",
+        understanding: "O autoatendimento desbloqueou a conta.",
+        action: "Confirmar e encerrar.",
+        certainty: "alta",
+        reason: "Bruno confirmou que voltou a entrar.",
+      },
+      text: "Perfeito. Qualquer coisa, estou por aqui.",
+    });
+    await brunoEarlier.close(start - 60, null);
+  }
+
+  // Diego Ramos, 3 days ago: not an IT matter, redirected without a ticket.
+  const diegoEarlier = await story("diego.ramos@nexo.com.br", 3 * DAY);
+  if (diegoEarlier) {
+    const start = 3 * DAY;
+    const q1 = await diegoEarlier.employee(start, "Quando cai o vale-refeição deste mês?");
+    await diegoEarlier.agent(start - 0.5, q1.seq, {
+      actions: [
+        {
+          tool: "buscar_central_de_ajuda",
+          label: "buscou na central de ajuda",
+          summary: "KB-010 Assuntos fora da TI",
+        },
+      ],
+      decision: {
+        intent: "fora_de_escopo",
+        understanding: "Pergunta sobre benefício, não sobre TI.",
+        action: "Redirecionar para o RH sem abrir chamado.",
+        certainty: "alta",
+        reason: "Benefícios são tratados pelo RH no Portal do Colaborador (KB-010).",
+        rules: ["Escopo: apenas assuntos de TI"],
+      },
+      text: "Benefícios como o vale-refeição ficam com o RH, no Portal do Colaborador; lá aparecem as datas de crédito. Se o portal não abrir, aí é com a TI e eu ajudo.",
+      blocks: [{ type: "knowledge", articles: [{ id: "KB-010", title: "Assuntos fora da TI" }] }],
+    });
+    await diegoEarlier.close(start - 30, null);
+  }
+
+  // Carla Mendes, 2 days ago: an equipment request opened only after she confirmed.
+  const carlaEarlier = await story("carla.mendes@nexo.com.br", 2 * DAY);
+  if (carlaEarlier) {
+    const start = 2 * DAY;
+    const q1 = await carlaEarlier.employee(
+      start,
+      "Preciso de um headset com microfone para as reuniões com clientes.",
+    );
+    await carlaEarlier.agent(start - 0.5, q1.seq, {
+      actions: [
+        {
+          tool: "buscar_central_de_ajuda",
+          label: "buscou na central de ajuda",
+          summary: "KB-009 Pedir equipamento",
+        },
+        {
+          tool: "verificar_duplicidade",
+          label: "verificou duplicidade",
+          summary: "Nenhum pedido de headset aberto",
+        },
+      ],
+      decision: {
+        intent: "abertura_de_chamado",
+        understanding: "Pedido de headset para reuniões externas.",
+        action: "Perguntar se há reunião hoje em risco antes de montar a requisição.",
+        certainty: "alta",
+        reason:
+          "Equipamento é uma requisição de Hardware (KB-009); só falta saber a urgência para a prioridade.",
+        missingInformation: ["Compromisso hoje"],
+      },
+      text: 'Equipamentos são pedidos por uma requisição de Hardware, com aprovação do gestor e entrega em até 5 dias úteis depois de aprovada ("Pedir equipamento"). Você tem alguma reunião hoje que dependa do headset?',
+      blocks: [
+        {
+          type: "knowledge",
+          articles: [{ id: "KB-009", title: "Pedir equipamento (monitor, teclado, headset)" }],
+        },
+        {
+          type: "quick_replies",
+          question: null,
+          options: ["Sim, hoje", "Não, pode ser nos próximos dias"],
+        },
+      ],
+    });
+    const q2 = await carlaEarlier.employee(start - 3, "Não, pode ser nos próximos dias");
+    const headset = await carlaEarlier.draft(start - 3.5, {
+      type: "REQ",
+      category: "Hardware",
+      title: "Headset com microfone para reuniões com clientes",
+      description:
+        "Carla Mendes (Comercial) precisa de um headset com microfone para reuniões com clientes. Sem reunião dependente hoje; usa o áudio do notebook enquanto isso.",
+      facts: { scope: "self", workBlocked: false, deadlineToday: false, hasWorkaround: true },
+    });
+    await carlaEarlier.agent(start - 3.5, q2.seq, {
+      actions: [
+        {
+          tool: "montar_rascunho",
+          label: "montou o rascunho",
+          summary: `Rascunho ${headset.code}: ${headset.title} (baixa).`,
+        },
+      ],
+      decision: {
+        intent: "abertura_de_chamado",
+        understanding: "Headset sem urgência, só para Carla.",
+        action: "Montar o rascunho da requisição e pedir confirmação.",
+        certainty: "alta",
+        reason: "Pedido sem compromisso hoje: prioridade baixa pela regra de requisição.",
+        rules: ["Só cria o chamado depois da confirmação do funcionário"],
+      },
+      text: `Montei o rascunho: requisição de Hardware com prioridade baixa, porque é um pedido sem urgência (resposta em até 5 dias úteis). Confira e confirme para eu abrir.`,
+      blocks: [{ type: "draft", draftId: headset.id }],
+    });
+    await carlaEarlier.confirm(start - 6, headset.id);
+    await carlaEarlier.close(start - 50, null);
+  }
 
   // Ana Souza: status inquiry, overdue SLA, transfer to N2 (waiting in the queue).
   const ana = await story("ana.souza@nexo.com.br", 16);
@@ -420,7 +680,7 @@ export async function seedConversations(
         },
       ],
       decision: {
-        intent: "pedido_de_acesso",
+        intent: "pedido_de_analista",
         understanding: "Acesso ao SAP SD para hoje.",
         action: `Mostrar a ${sap.number}, que já pede esse acesso, em vez de abrir outra.`,
         certainty: "alta",
@@ -572,7 +832,7 @@ export async function seedConversations(
     await elisa.agent(26 * 60 - 4.5, q2.seq, {
       actions: [],
       decision: {
-        intent: "encerramento",
+        intent: "outro",
         understanding: "O procedimento resolveu.",
         action: "Confirmar e encerrar.",
         certainty: "alta",
@@ -624,7 +884,7 @@ export async function seedConversations(
         },
       ],
       decision: {
-        intent: "pedido_de_acesso",
+        intent: "pedido_de_analista",
         understanding: "O programa não aparece no portal para o perfil de Fábio.",
         action: "Transferir: liberar o catálogo exige um analista.",
         certainty: "alta",
@@ -656,6 +916,83 @@ export async function seedConversations(
     );
     await fabio.close(22 * 60 - 21, rafael);
     await fabio.markRead();
+  }
+
+  // Gabriela Rocha: a paid-license software request, confirmed and still open.
+  const gabriela = await story("gabriela.rocha@nexo.com.br", 40);
+  if (gabriela) {
+    const q1 = await gabriela.employee(
+      40,
+      "Preciso do Adobe Acrobat Pro para editar contratos. Não achei no Portal de Softwares.",
+    );
+    await gabriela.agent(39.5, q1.seq, {
+      actions: [
+        {
+          tool: "buscar_central_de_ajuda",
+          label: "buscou na central de ajuda",
+          summary: "KB-005 Instalar programas pelo Portal de Softwares",
+        },
+      ],
+      decision: {
+        intent: "abertura_de_chamado",
+        understanding: "Programa de licença paga, fora do catálogo do portal.",
+        action: "Explicar a regra e perguntar a urgência antes de montar a requisição.",
+        certainty: "alta",
+        reason:
+          "Programas com licença paga precisam de requisição de Software com justificativa do gestor (KB-005).",
+        missingInformation: ["Compromisso hoje"],
+      },
+      text: 'O Acrobat Pro tem licença paga, então não fica no Portal de Softwares: ele precisa de uma requisição de Software com a justificativa do seu gestor ("Instalar programas pelo Portal de Softwares"). Você tem algum contrato para editar hoje?',
+      blocks: [
+        {
+          type: "knowledge",
+          articles: [{ id: "KB-005", title: "Instalar programas pelo Portal de Softwares" }],
+        },
+        {
+          type: "quick_replies",
+          question: null,
+          options: ["Sim, hoje", "Não, é para a próxima semana"],
+        },
+      ],
+    });
+    const q2 = await gabriela.employee(
+      36,
+      "Não, é para a próxima semana. Minha gestora já aprovou.",
+    );
+    const acrobat = await gabriela.draft(35.5, {
+      type: "REQ",
+      category: "Software",
+      title: "Licença do Adobe Acrobat Pro para edição de contratos",
+      description:
+        "Gabriela Rocha (Recursos Humanos) precisa do Adobe Acrobat Pro para editar contratos. Licença paga, fora do Portal de Softwares. Gestora já aprovou; uso a partir da próxima semana.",
+      facts: { scope: "self", workBlocked: false, deadlineToday: false, hasWorkaround: true },
+    });
+    await gabriela.agent(35.5, q2.seq, {
+      actions: [
+        {
+          tool: "verificar_duplicidade",
+          label: "verificou duplicidade",
+          summary: "Nenhum pedido de Acrobat aberto",
+        },
+        {
+          tool: "montar_rascunho",
+          label: "montou o rascunho",
+          summary: `Rascunho ${acrobat.code}: ${acrobat.title} (baixa).`,
+        },
+      ],
+      decision: {
+        intent: "abertura_de_chamado",
+        understanding: "Licença de Acrobat Pro sem urgência, já aprovada pela gestora.",
+        action: "Montar o rascunho da requisição e pedir confirmação.",
+        certainty: "alta",
+        reason: "Pedido sem compromisso hoje: prioridade baixa. A aprovação vai na descrição.",
+        rules: ["Só cria o chamado depois da confirmação do funcionário"],
+      },
+      text: "Montei o rascunho com a aprovação da sua gestora na descrição. Prioridade baixa, porque é um pedido sem urgência (resposta em até 5 dias úteis). Confira e confirme para eu abrir.",
+      blocks: [{ type: "draft", draftId: acrobat.id }],
+    });
+    await gabriela.confirm(33, acrobat.id);
+    await gabriela.markRead();
   }
 
   return created;

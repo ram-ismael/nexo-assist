@@ -28,6 +28,7 @@ import {
 } from "@/server/conversations/repository";
 import { serializeConversation, serializeMessages } from "@/server/conversations/serialize";
 import { nexoAgent } from "./agent";
+import { fallbackText, knowledgeSources } from "./answer";
 import { recentMessages, toModelMessages, turnFacts } from "./context-builder";
 import { AGENT_INSTRUCTIONS } from "./instructions";
 import { resolveModel } from "./model";
@@ -249,6 +250,7 @@ export async function runAgentTurn(
     now,
     calendar: env.calendar,
     blocks: [],
+    articlesFound: new Map(),
     decision: null,
     handedOff: false,
     focusTicketId: accepted.conversation.focusTicketId,
@@ -378,6 +380,7 @@ async function finishTurn(
       rules: [],
       missingInformation: [],
       escalationReason: null,
+      articlesUsed: [],
     };
     await tx.insert(agentDecisions).values({
       turnId: accepted.turnId,
@@ -393,14 +396,16 @@ async function finishTurn(
       source: turn.decision ? "agent" : "system",
     });
     let message: MessageRow | null = null;
-    const content = text.trim();
-    if (!discarded && (content || turn.blocks.length > 0)) {
+    const sources = knowledgeSources(turn, text);
+    const blocks = sources ? [sources, ...turn.blocks] : turn.blocks;
+    const content = text.trim() || fallbackText(blocks);
+    if (!discarded && (content || blocks.length > 0)) {
       message = await appendMessage(tx, {
         conversationId: conversation.id,
         kind: "agent",
         senderId: null,
         content,
-        blocks: turn.blocks,
+        blocks,
         turnId: accepted.turnId,
       });
     }
