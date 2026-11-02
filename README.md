@@ -235,18 +235,18 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 
 ## Deploy
 
-Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em [docs/deployment.md](docs/deployment.md):
+**Vercel + Neon**, sem servidor extra. Runbook completo, com todos os comandos, em [docs/deployment.md](docs/deployment.md).
 
-1. Criar o banco no Neon e usar a URL _pooled_ como `DATABASE_URL`.
-2. Configurar as variáveis na Vercel (chaves como _Sensitive_).
-3. `pnpm db:setup` contra o Neon (migrações são um passo explícito de release).
-4. Conectar o repositório: `main` em produção, demais branches em preview.
+- **Banco:** Neon `nexo-assist` (`aws-sa-east-1`), só o branch `main`. A aplicação usa a string _pooled_; migração e seed usam a direta.
+- **Aplicação:** projeto Vercel `nexo-assist`, ligado ao GitHub com `main` como branch de produção.
+- **Deploy automático:** todo commit que chega em `main` (merge do PR `dev → main`) publica a produção sozinho. Push em `dev` gera só um preview de build.
+- **Release:** `dev` → PR para `main` → CI verde → `pnpm db:migrate` no Neon se houver migração nova (antes do merge) → merge → conferir `GET /api/health`.
 
-**Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#estado).
+**Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#5-ponto-de-restauração-e-rollback).
 
 ## Trade-offs e limitações
 
-- **Polling em vez de WebSocket** entre funcionário e analista: simples e confiável na Vercel; custa até ~3 s de atraso e algumas consultas leves. Com mais escala, trocaria por um provedor de pub/sub (Ably, Pusher ou Neon logical replication) mantendo o mesmo cursor.
+- **Polling em vez de WebSocket** entre funcionário e analista: simples e confiável na Vercel; custa até ~2 s de atraso e algumas consultas leves. Com mais escala, trocaria por um provedor de pub/sub (Ably, Pusher ou Neon logical replication) mantendo o mesmo cursor.
 - **Memória própria em vez da memória do Mastra**: o histórico já está no Postgres com o modelo de dados do produto (blocos, rascunhos, decisões). Reconstruir o contexto a partir dele evita duas fontes da verdade. Conversas muito longas usam só as 16 últimas mensagens mais os fatos do turno; um resumo incremental gerado pelo modelo seria o próximo passo.
 - **Busca full-text em vez de vetorial**: com 10 artigos, o full-text em português com stemming é suficiente, determinístico e grátis.
 - **Login de demonstração** aceita qualquer senha para e-mails do seed. Inaceitável com dados reais.
