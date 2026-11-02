@@ -25,6 +25,10 @@ test("streams the answer in place and shows real typing between employee and ana
   });
   await send(employee, "Qual o status do meu chamado?");
   await expect(employee.getByText("consultou seus chamados").first()).toBeVisible();
+  // The trail shows while the turn runs; only the stored message has "Por quê?".
+  await expect(employee.getByRole("button", { name: "Por quê?" })).toHaveCount(1, {
+    timeout: 15_000,
+  });
   await expect(employee.locator(".animate-caret")).toHaveCount(0);
   const samples = await employee.evaluate(
     () => (window as unknown as { liveSamples: { dots: boolean; text: number }[] }).liveSamples,
@@ -32,7 +36,6 @@ test("streams the answer in place and shows real typing between employee and ana
   expect(samples.some((sample) => sample.dots)).toBe(true);
   const partial = new Set(samples.map((sample) => sample.text).filter((length) => length > 0));
   expect(partial.size).toBeGreaterThanOrEqual(2);
-  await expect(employee.getByRole("button", { name: "Por quê?" })).toHaveCount(1);
 
   await employee.getByRole("button", { name: "Mais opções" }).click();
   await employee.getByRole("menuitem", { name: "Falar com um analista" }).click();
