@@ -6,17 +6,17 @@ Um projeto **Vercel** (Next.js, funções Node) e um banco **Neon** (PostgreSQL)
 
 ## Visão geral
 
-| Peça                  | Valor                                                                                   |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| Repositório           | `github.com/ram-ismael/nexo-assist` (privado)                                           |
-| Branches Git          | **só `dev` e `main`**. `dev` recebe os commits; `main` é a produção                     |
-| Projeto Vercel        | `nexo-assist` (time `ram-e0bc`), ligado ao GitHub, branch de produção `main`            |
-| URL de produção       | https://nexo-assist-two.vercel.app                                                      |
-| Projeto Neon          | `nexo-assist` (`twilight-sun-46088638`), região `aws-sa-east-1`, PostgreSQL 18          |
-| Branch Neon           | **só `main`** (o padrão). Banco `neondb`, role `neondb_owner`                           |
-| Conexão da aplicação  | string _pooled_ (`ep-…-pooler.c-2.sa-east-1.aws.neon.tech`) em `DATABASE_URL` na Vercel |
-| Conexão de manutenção | string direta (sem `-pooler`), usada só para migração e seed                            |
-| CI                    | GitHub Actions (`.github/workflows/ci.yml`): `verify` e `e2e` em todo PR e push         |
+| Peça                  | Valor                                                                           |
+| --------------------- | ------------------------------------------------------------------------------- |
+| Repositório           | `github.com/ram-ismael/nexo-assist` (público)                                   |
+| Branches Git          | **só `dev` e `main`**. `dev` recebe os commits; `main` é a produção             |
+| Projeto Vercel        | `nexo-assist`, ligado ao GitHub, branch de produção `main`                      |
+| URL de produção       | https://nexo-assist-two.vercel.app                                              |
+| Projeto Neon          | `nexo-assist`, região `aws-sa-east-1`, PostgreSQL 18                            |
+| Branch Neon           | **só `main`** (o padrão). Banco `neondb`, role `neondb_owner`                   |
+| Conexão da aplicação  | string _pooled_ (host com `-pooler`) em `DATABASE_URL` na Vercel                |
+| Conexão de manutenção | string direta (sem `-pooler`), usada só para migração e seed                    |
+| CI                    | GitHub Actions (`.github/workflows/ci.yml`): `verify` e `e2e` em todo PR e push |
 
 ```
  dev ──push──► GitHub ──► CI (verify + e2e)
@@ -27,6 +27,17 @@ Um projeto **Vercel** (Next.js, funções Node) e um banco **Neon** (PostgreSQL)
 
  Neon (main) ◄── migração/seed: passo manual, com a string direta, ANTES do merge
 ```
+
+## Repositório público: o que fica fora dele
+
+O código e a documentação são públicos; credenciais nunca entram no Git:
+
+- strings de conexão do Neon ficam só no `.env.neon` local e nas variáveis _Sensitive_ da Vercel; chaves da Anthropic, só na Vercel;
+- `.gitignore` ignora todo `.env*` (exceto o `.env.example`, sem valores) e a pasta `.neon`;
+- a CI não usa segredos: roda com Postgres de serviço e o modelo roteirizado, então PRs de forks não têm o que vazar;
+- deploys de PRs de forks na Vercel dependem de autorização no painel (padrão da Vercel), então código de terceiros não roda com as variáveis de produção.
+
+Antes de um commit, `git diff --cached` não deve conter `postgres://…@`, `sk-ant-` nem tokens.
 
 ## Ferramentas na máquina
 
