@@ -278,6 +278,7 @@ No fundo, o objetivo é que o sistema não se limite a responder aos funcionári
 
 </br></br>
 ---
+
 ```c
 printf("Sim, este projecto foi desenvolvido com muito amor! ❤️\n");
 ```
