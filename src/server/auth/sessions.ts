@@ -31,6 +31,21 @@ export async function findActiveUserByEmail(executor: Executor, email: string) {
   return rows[0] ?? null;
 }
 
+/** Every active account, for the demo sign-in list; the same rows the login accepts. */
+export async function listActiveAccounts(executor: Executor) {
+  return executor
+    .select({
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      department: users.department,
+      supportLevel: users.supportLevel,
+    })
+    .from(users)
+    .where(eq(users.active, true))
+    .orderBy(users.role, users.name);
+}
+
 export async function createSession(
   executor: Executor,
   input: { userId: string; rememberMe: boolean; userAgent: string | null },
