@@ -16,7 +16,6 @@ export const POST = route<"employee", { id: string }>("employee", async ({ user,
       result.conversation,
       config().AGENT_SESSION_MESSAGE_LIMIT,
     ),
-    targetLevel: result.targetLevel,
     respondBy: result.respondBy.toISOString(),
   });
 });

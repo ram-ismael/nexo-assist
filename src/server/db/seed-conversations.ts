@@ -359,22 +359,21 @@ export async function seedConversations(
     });
     const q3 = await ana.employee(10, `Está parado há ${late} dias. Quero falar com um analista.`);
     let respondBy: Date | null = null;
-    let level = "Suporte N2";
     await ana.agent(9.5, q3.seq, {
       actions: [
         {
           tool: "transferir_para_analista",
           label: "chamou um analista",
-          summary: "Transferida para Suporte N2 (overdue).",
+          summary: "Transferida para o service desk, indicada ao Suporte N2 (overdue).",
         },
       ],
       decision: {
         intent: "pedido_de_analista",
         understanding: "Ana aceitou falar com um analista sobre o chamado vencido.",
-        action: "Transferir para o Suporte N2 com resumo.",
+        action: "Transferir para o service desk com resumo, indicando o Suporte N2.",
         certainty: "alta",
         reason: "Chamado vencido e pedido explícito de Ana.",
-        rules: ["Chamado vencido vai para N2"],
+        rules: ["Chamado vencido é indicado ao N2"],
         escalationReason: "Prazo vencido",
       },
       beforeAnswer: async () => {
@@ -385,10 +384,9 @@ export async function seedConversations(
           summary: `${slow.number} · ${slow.title}. Sem atualização há ${late} dias, acima do prazo de ${card.slaLabel} (prioridade média). Já reiniciou e rodou o diagnóstico da central sem resultado. Pediu para falar com um analista.`,
         });
         respondBy = result.respondBy;
-        level = result.targetLevel;
       },
       text: () =>
-        `Encaminhei para o ${level}. Um analista vai falar com você até ${
+        `Chamei a equipe do service desk com o resumo do chamado. Um analista vai falar com você até ${
           respondBy
             ? untilLabel((respondBy as Date).toISOString(), tz, ana.at(9.5))
             : "o fim do prazo"

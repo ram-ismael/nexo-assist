@@ -10,6 +10,8 @@ Mesmo no modo demo:
 - papel e identidade vêm do banco, nunca do cliente;
 - tentativas são limitadas por IP e auditadas.
 
+As contas de demonstração ficam listadas na página pública `/privacidade` e no README, com o aviso de que qualquer senha é aceita. É intencional: o repositório e a URL de produção são públicos para avaliação, e não há dado real a proteger. O risco que sobra é custo de IA, limitado pelos controles de [Abuso e custo](#abuso-e-custo) (teto global diário de turnos, limites por funcionário e por sessão) e pelo limite de gasto no console da Anthropic. Com `DEMO_AUTH_ENABLED=false` a lista some da página e o login deixa de aceitar senhas.
+
 ### Substituir o login de demonstração
 
 O ponto de troca é `src/app/api/auth/login/route.ts`. Com OIDC (Entra ID, Okta, Google Workspace): redirecionar para o provedor, validar o `id_token` no callback, achar ou provisionar o usuário pelo e-mail corporativo e chamar `createSession`. Sessões, políticas e o resto da aplicação não mudam.

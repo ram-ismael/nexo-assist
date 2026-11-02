@@ -57,7 +57,15 @@ function continues(previous: MessageDTO | undefined, message: MessageDTO): boole
 const NEAR_TOP_PX = 120;
 const NEAR_BOTTOM_PX = 160;
 
-function SystemLine({ message, timeZone }: { message: MessageDTO; timeZone: string }) {
+function SystemLine({
+  message,
+  timeZone,
+  viewer,
+}: {
+  message: MessageDTO;
+  timeZone: string;
+  viewer: Viewer;
+}) {
   const handoff = message.blocks.find((block) => block.type === "handoff");
   const notice = message.blocks.find((block) => block.type === "notice");
   if (notice && !handoff) {
@@ -75,7 +83,7 @@ function SystemLine({ message, timeZone }: { message: MessageDTO; timeZone: stri
       <span className="bg-rule h-px flex-1" />
       <span className="inline-flex items-center gap-2 text-center">
         {handoff && handoff.type === "handoff" ? (
-          <HandoffLine block={handoff} timeZone={timeZone} />
+          <HandoffLine block={handoff} timeZone={timeZone} viewer={viewer} />
         ) : (
           <>
             {message.content.includes("assumiu") ? (
@@ -126,7 +134,8 @@ function EmployeeViewMessage({
       </div>
     );
   }
-  if (message.kind === "system") return <SystemLine message={message} timeZone={timeZone} />;
+  if (message.kind === "system")
+    return <SystemLine message={message} timeZone={timeZone} viewer={viewer} />;
   const isAnalyst = message.kind === "analyst";
   const hasWide = message.blocks.some((block) =>
     ["ticket_card", "ticket_selection", "draft"].includes(block.type),
@@ -190,7 +199,8 @@ function ConsoleViewMessage({
   read: boolean;
 }) {
   const noop: BlockHandlers = { onChanged: () => undefined };
-  if (message.kind === "system") return <SystemLine message={message} timeZone={timeZone} />;
+  if (message.kind === "system")
+    return <SystemLine message={message} timeZone={timeZone} viewer="analyst" />;
   if (message.kind === "employee") {
     return (
       <div className="flex justify-start">

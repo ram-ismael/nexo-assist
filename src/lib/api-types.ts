@@ -160,6 +160,8 @@ export type QueueItemDTO = {
   assignedAnalyst: { id: string; name: string } | null;
   handoff: {
     reason: string;
+    /** Recommended level ("Suporte N2"); any analyst may still assume it. */
+    targetLevel: string;
     respondBy: string | null;
     ticketNumber: string | null;
     createdAt: string;

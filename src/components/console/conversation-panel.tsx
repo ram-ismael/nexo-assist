@@ -335,7 +335,13 @@ export function ConversationPanel({
                   </p>
                   <p className="text-ink-3 text-[14px]">
                     {state === "waiting_analyst"
-                      ? `Agent pausado${handoff?.respondBy ? ` · ${contactLabel(handoff.respondBy, timeZone)}` : ""}`
+                      ? [
+                          "Agent pausado",
+                          handoff ? `indicada ao ${handoff.targetLevel}` : null,
+                          handoff?.respondBy ? contactLabel(handoff.respondBy, timeZone) : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
                       : "Assuma se precisar intervir; o agent é pausado na hora."}
                   </p>
                 </div>

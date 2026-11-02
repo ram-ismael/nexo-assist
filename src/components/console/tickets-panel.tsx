@@ -267,7 +267,7 @@ export function TicketsPanel({
                         )}
                         {handoff.claimedBy
                           ? `Assumido por ${handoff.claimedBy}`
-                          : `Transferido para ${handoff.targetLevel}`}
+                          : `Transferido · indicado ao ${handoff.targetLevel}`}
                       </span>
                       <span className="text-ink-3">
                         {formatTime(handoff.claimedAt ?? handoff.createdAt, timeZone)}

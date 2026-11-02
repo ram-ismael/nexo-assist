@@ -25,7 +25,10 @@ test("status inquiry, overdue ticket, transfer, human takeover and return", asyn
   await expect(employee.getByText("Ações executadas")).toBeVisible();
 
   await employee.getByRole("button", { name: "Falar com um analista" }).click();
-  await expect(employee.getByText(/Transferida para Suporte N2/)).toBeVisible();
+  // The employee is told it went to the service desk; the level is only a
+  // recommendation the analysts see.
+  await expect(employee.getByText("Transferida para o service desk")).toBeVisible();
+  await expect(employee.getByText(/Suporte N2/)).toHaveCount(0);
   await expect(
     employee.getByRole("status").filter({ hasText: "Aguardando atendente" }),
   ).toBeVisible();
@@ -37,6 +40,7 @@ test("status inquiry, overdue ticket, transfer, human takeover and return", asyn
   await analyst.getByRole("button", { name: /Ana Souza/ }).click();
   await expect(analyst.getByText("Ana espera um atendente")).toBeVisible();
   await expect(analyst.getByText("Motivo:")).toBeVisible();
+  await expect(analyst.getByText(/indicada ao Suporte N2/).first()).toBeVisible();
   await snap(analyst, "t4-conversa-transferida");
 
   await analyst.getByRole("button", { name: "Assumir atendimento" }).click();

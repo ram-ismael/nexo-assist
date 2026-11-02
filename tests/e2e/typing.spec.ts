@@ -39,7 +39,7 @@ test("streams the answer in place and shows real typing between employee and ana
 
   await employee.getByRole("button", { name: "Mais opções" }).click();
   await employee.getByRole("menuitem", { name: "Falar com um analista" }).click();
-  await expect(employee.getByText(/Transferida para Suporte/)).toBeVisible();
+  await expect(employee.getByText("Transferida para o service desk")).toBeVisible();
 
   const analyst = await (
     await browser.newContext({ viewport: { width: 1600, height: 900 } })
