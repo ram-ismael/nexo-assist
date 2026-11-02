@@ -17,7 +17,7 @@ export const INTENTS = [
   "esclarecimento",
   "outro",
 ] as const;
-type Intent = (typeof INTENTS)[number];
+export type Intent = (typeof INTENTS)[number];
 
 export type DecisionInput = {
   intent: Intent;
@@ -28,6 +28,8 @@ export type DecisionInput = {
   rules: string[];
   missingInformation: string[];
   escalationReason: string | null;
+  /** Help-center articles the answer is based on (ids such as "KB-001"). */
+  articlesUsed: string[];
 };
 
 export type TurnEvent =
@@ -51,6 +53,8 @@ export type TurnContext = {
   now: Date;
   calendar: BusinessCalendar;
   blocks: MessageBlock[];
+  /** Every article the help-center search returned this turn, by id. */
+  articlesFound: Map<string, string>;
   decision: DecisionInput | null;
   handedOff: boolean;
   focusTicketId: string | null;
