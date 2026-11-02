@@ -45,7 +45,3 @@ export async function assistantStatus(now = Date.now()): Promise<AssistantStatus
   cached = { status, at: now };
   return status;
 }
-
-export function resetAssistantStatusForTests(): void {
-  cached = null;
-}

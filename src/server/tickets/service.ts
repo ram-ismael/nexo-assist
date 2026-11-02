@@ -6,7 +6,6 @@ import {
   formatTicketNumber,
   isOpenStatus,
   OPEN_STATUSES,
-  PRIORITY_LABEL,
   STATUS_LABEL,
   type AffectedScope,
   type Priority,
@@ -16,7 +15,7 @@ import {
 } from "@/domain/tickets";
 import type { Executor } from "@/server/db/client";
 import { ticketEvents, tickets } from "@/server/db/schema";
-import { AppError, conflict, notFound } from "@/server/errors";
+import { AppError, conflict } from "@/server/errors";
 import type { TicketSnapshot } from "@/server/messages/blocks";
 
 export type TicketRow = typeof tickets.$inferSelect;
@@ -324,13 +323,4 @@ export function ticketSnapshot(ticket: TicketRow, now: Date): TicketSnapshot {
     overdue: open && slaState(ticket.slaDueAt, now).overdue,
     resolvedAt: ticket.resolvedAt?.toISOString() ?? null,
   };
-}
-
-export function describePriority(priority: Priority): string {
-  return PRIORITY_LABEL[priority];
-}
-
-export function ensureFound<T>(value: T | null, what = "Chamado"): T {
-  if (!value) throw notFound(what);
-  return value;
 }

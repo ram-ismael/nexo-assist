@@ -1,4 +1,4 @@
-import { AppError, forbidden, notFound } from "@/server/errors";
+import { notFound } from "@/server/errors";
 import type { SessionUser } from "./sessions";
 
 /**
@@ -7,10 +7,6 @@ import type { SessionUser } from "./sessions";
  * Resources an employee may not see are reported as "not found", so an
  * existing ticket number never leaks through a different error.
  */
-export function assertRole(user: SessionUser, role: SessionUser["role"]): void {
-  if (user.role !== role) throw forbidden();
-}
-
 export function assertCanViewConversation(
   user: SessionUser,
   conversation: { employeeId: string } | null | undefined,
@@ -27,10 +23,4 @@ export function assertCanViewTicket(
   if (!ticket) throw notFound("Chamado");
   if (user.role === "analyst") return;
   if (ticket.requesterId !== user.id) throw notFound("Chamado");
-}
-
-export function assertEmployeeOwns(user: SessionUser, ownerId: string, what: string): void {
-  if (user.role !== "employee" || user.id !== ownerId) {
-    throw new AppError("not_found", `${what} não encontrado.`);
-  }
 }
