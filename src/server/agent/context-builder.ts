@@ -114,7 +114,7 @@ export async function turnFacts(
   const lines = [
     "# Contexto deste atendimento",
     `- Funcionário: ${user.name}, área ${user.department}. Computador: ${user.deviceOs ?? "não informado"}.`,
-    `- Agora: ${formatLocal(now, calendar)} (${calendar.timeZone}). Service desk ${isWithinBusinessHours(now, calendar) ? "aberto" : "fora do horário (só críticos têm plantão)"}; expediente seg-sex ${calendar.dayStartHour}h-${calendar.dayEndHour}h.`,
+    `- Agora: ${formatLocal(now, calendar)} (${calendar.timeZone}). Service desk ${isWithinBusinessHours(now, calendar) ? "aberto agora" : "fora do horário agora"}; expediente seg-sex ${calendar.dayStartHour}h-${calendar.dayEndHour}h; chamados críticos têm plantão 24 horas.`,
     `- Mensagens do funcionário nesta sessão: ${sent} de ${limit}.`,
   ];
   if (focus) lines.push(`- Chamado em foco: ${focus.number} (${focus.title}).`);
