@@ -41,19 +41,28 @@ export function toModelMessages(
   rows: MessageRow[],
   senderNames: Map<string, string>,
 ): ModelMessage[] {
-  return rows.map((row) => {
+  return rows.flatMap((row): ModelMessage[] => {
     const extras = row.blocks.map(describeBlock).join(" ");
     switch (row.kind) {
       case "employee":
-        return { role: "user", content: row.content };
-      case "agent":
-        return { role: "assistant", content: [row.content, extras].filter(Boolean).join("\n") };
+        return [{ role: "user", content: row.content }];
+      case "agent": {
+        const answer: ModelMessage = {
+          role: "assistant",
+          content: [row.content, extras].filter(Boolean).join("\n"),
+        };
+        // An agent message outside a turn is the announcement of a draft the
+        // employee confirmed on the card: the click left no text, so say it.
+        return row.turnId
+          ? [answer]
+          : [{ role: "user", content: "[confirmei o rascunho pelo botão]" }, answer];
+      }
       case "analyst": {
         const name = (row.senderId && senderNames.get(row.senderId)) ?? "Analista";
-        return { role: "assistant", content: `[mensagem do analista ${name}]: ${row.content}` };
+        return [{ role: "assistant", content: `[mensagem do analista ${name}]: ${row.content}` }];
       }
       case "system":
-        return { role: "assistant", content: `[evento: ${row.content}] ${extras}`.trim() };
+        return [{ role: "assistant", content: `[evento: ${row.content}] ${extras}`.trim() }];
     }
   });
 }
