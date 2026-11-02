@@ -26,7 +26,7 @@ Tudo o que aparece depois do login é estado real: mensagens, chamados, transfer
 
 Documentação detalhada em [`docs/`](docs): [arquitetura](docs/architecture.md), [agent](docs/agent.md), [regras](docs/business-rules.md), [API](docs/api.md), [segurança](docs/security.md), [testes](docs/testing.md), [deploy](docs/deployment.md) e [decisões](docs/decisions).
 
-## Como rodar
+## 1. Como rodar
 
 Requisitos: Node 22+, pnpm 12 (versão fixada em `packageManager`) e PostgreSQL 15+ (local ou Neon).
 
@@ -53,7 +53,7 @@ Sem `ANTHROPIC_API_KEY`, o agent informa que está indisponível (nada de respos
 
 Variáveis de ambiente: veja [`.env.example`](.env.example), que documenta cada uma.
 
-## Jornadas principais
+## 2. Jornadas principais
 
 **Funcionário (telas 1, 2, 3 e 6)**
 
@@ -72,7 +72,7 @@ Variáveis de ambiente: veja [`.env.example`](.env.example), que documenta cada 
 3. **Assumir atendimento**: atômico; se dois analistas clicarem juntos, só um consegue. O agent fica pausado no servidor.
 4. Conversa com o funcionário, atualiza chamados (status e nota, renovando o prazo), **Devolve ao agent** ou **Encerra**. Encerrar a conversa não muda o status dos chamados.
 
-## Arquitetura
+## 3. Arquitetura
 
 Um único app Next.js com módulos bem separados. Não há servidor Node separado: as rotas de API rodam como funções Node na Vercel.
 
@@ -110,7 +110,7 @@ Um único app Next.js com módulos bem separados. Não há servidor Node separad
 
 Mais detalhes, incluindo o modelo de dados, em [docs/architecture.md](docs/architecture.md).
 
-## Como o agent decide
+## 4. Como o agent decide
 
 O modelo propõe; a aplicação decide se é permitido.
 
@@ -143,7 +143,7 @@ Garantias que **não** dependem do prompt:
 
 Detalhes, instruções do sistema e exemplos em [docs/agent.md](docs/agent.md).
 
-## Transparência das decisões
+## 5. Transparência das decisões
 
 Acima de cada resposta aparecem as ações executadas ("consultou seus chamados", "calculou o prazo", "montou o rascunho"). Elas são lidas de `agent_actions`: se a ferramenta não rodou, a etiqueta não existe; se falhou, aparece como falha.
 
@@ -156,7 +156,7 @@ Acima de cada resposta aparecem as ações executadas ("consultou seus chamados"
 
 Se o modelo não registrar a própria decisão, o sistema grava uma reconstruída a partir das ações e marca isso no painel. Nada de raciocínio interno do modelo é exposto.
 
-## Regras do service desk
+## 6. Regras do service desk
 
 Implementadas em `src/domain` e cobertas por testes.
 
@@ -175,7 +175,7 @@ Implementadas em `src/domain` e cobertas por testes.
 
 Tabela completa de estados e transições em [docs/business-rules.md](docs/business-rules.md).
 
-## Persistência, tempo real e histórico
+## 7. Persistência, tempo real e histórico
 
 - **Postgres é a fonte da verdade** para conversas, mensagens, chamados, estado (agent ou analista), rascunhos, decisões e auditoria. Sobrevive a refresh, reinício e novo deploy. `localStorage` guarda apenas o rascunho de texto não enviado.
 - **Migrações versionadas** (`drizzle/`) e **seed idempotente** (`on conflict do nothing`): rodar de novo não duplica nem desfaz alterações reais.
@@ -190,7 +190,7 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 - **Estados honestos**: "Assistente online / instável / indisponível" vem da configuração e de como terminaram os últimos turnos do serviço; "Enviando…" até o servidor confirmar; "processando" só quando existe turno em andamento no banco; o indicador de digitação do assistente só aparece quando a mensagem vai para o agent. Reenviar depois de uma queda reutiliza o id do cliente, então o servidor grava uma vez.
 - **Histórico infinito**: abre na página mais recente (30 mensagens) e carrega as anteriores ao rolar para cima, com cursor estável (`seq` monotônico) e âncora de rolagem para não pular. Mensagens novas não puxam a tela se você estiver lendo o passado; aparece "Nova mensagem".
 
-## Autenticação, autorização e segurança
+## 8. Autenticação, autorização e segurança
 
 - **Login de demonstração** (`DEMO_AUTH_ENABLED=true`): só e-mails do seed entram, com qualquer senha não vazia. Isso é **deliberadamente inseguro** e só serve para dados fictícios. A camada é substituível por SSO/OIDC corporativo ([como](docs/security.md#substituir-o-login-de-demonstração)).
 - Sessões no Postgres com hash do token; cookie HttpOnly, SameSite=Lax, Secure em produção; logout revoga a sessão.
@@ -202,7 +202,7 @@ Tabela completa de estados e transições em [docs/business-rules.md](docs/busin
 
 Detalhes em [docs/security.md](docs/security.md).
 
-## Qualidade das decisões e testes
+## 9. Qualidade das decisões e testes
 
 ```bash
 pnpm test              # unitários + integração (Postgres de teste isolado)
@@ -218,7 +218,7 @@ pnpm verify            # formatação, lint, tipos, testes e build
 
 O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como passo manual. Resultados atuais em [docs/testing.md](docs/testing.md).
 
-## Custo e desempenho
+## 10. Custo e desempenho
 
 - Modelo padrão `claude-haiku-5-5` (configurável em `LLM_MODEL`): bom uso de ferramentas e de português com baixa latência e custo. As decisões críticas não dependem dele.
 - Contexto limitado (16 mensagens + fatos do turno), `maxOutputTokens` 1.200, no máximo 8 passos por turno, timeout de 45 s.
@@ -227,13 +227,13 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 - O cartão "Agora no service desk" da tela de login também é real e anônimo (a página é pública): quando foi o último atendimento e quais passos o assistente deu, categoria/prioridade/prazo do último chamado aberto por ele e os totais do dia. Sem nomes, textos, títulos ou números de chamado; o histórico de demonstração não entra.
 - Consultas indexadas, paginação por cursor, sem N+1 nas páginas de mensagens e na fila, pool pequeno de conexões para serverless. A fila do analista foi medida com 150 mil conversas e 1,2 milhão de mensagens: contagens de 25,9 ms para 0,8 ms e lista de 29 ms para 6,6 ms ([como medir](docs/testing.md#desempenho-da-fila-do-analista)).
 
-## Git e CI
+## 11. Git e CI
 
 - Só duas branches: `dev` (integração, onde os commits entram) e `main` (estável, produção). Release por PR `dev → main`.
 - Issues por marco (#1–#7), PRs ligados a elas.
 - GitHub Actions: formatação, lint, tipos, unitários, integração (Postgres de serviço) e build; um segundo job roda o Playwright contra o build de produção.
 
-## Deploy
+## 12. Deploy
 
 **Vercel + Neon**, sem servidor extra. Runbook completo, com todos os comandos, em [docs/deployment.md](docs/deployment.md).
 
@@ -244,7 +244,7 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 
 **Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#5-ponto-de-restauração-e-rollback).
 
-## Trade-offs e limitações
+## 13. Trade-offs e limitações
 
 - **Polling em vez de WebSocket** entre funcionário e analista: simples e confiável na Vercel; custa até ~2 s de atraso e algumas consultas leves. Com mais escala, trocaria por um provedor de pub/sub (Ably, Pusher ou Neon logical replication) mantendo o mesmo cursor.
 - **Memória própria em vez da memória do Mastra**: o histórico já está no Postgres com o modelo de dados do produto (blocos, rascunhos, decisões). Reconstruir o contexto a partir dele evita duas fontes da verdade. Conversas muito longas usam só as 16 últimas mensagens mais os fatos do turno; um resumo incremental gerado pelo modelo seria o próximo passo.
@@ -256,7 +256,7 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 - **Lido/não lido** na fila é compartilhado entre analistas (um marcador por conversa), não individual.
 - **"Escrevendo…" por polling**: aparece com até ~2 s de atraso; instantâneo exigiria um canal de push (WebSocket).
 
-## O que faria com mais tempo
+## 14. O que faria com mais tempo
 
 Se tivesse mais tempo para desenvolver o projeto, minha prioridade seria tornar o agent mais confiável, reduzir os custos de operação e melhorar a experiência dos funcionários. Mais do que adicionar funcionalidades, gostaria de garantir que o sistema resolve problemas reais com menos intervenção dos analistas.
 
@@ -275,3 +275,11 @@ Por último, exploraria **um aplicativo desktop para ajudar no diagnóstico dos 
 Não avançaria com tudo ao mesmo tempo. **Começaria pela confiabilidade do agent, pela medição de custos e pela qualidade do atendimento**, porque têm impacto direto na operação. As funcionalidades mais avançadas, como voz e diagnóstico local, viriam aos poucos, depois de avaliar o benefício real de cada uma.
 
 No fundo, o objetivo é que o sistema não se limite a responder aos funcionários, mas resolva cada vez mais incidentes, reduza o trabalho repetitivo dos analistas e mantenha os custos sob controle.
+
+</br></br>
+---
+```c
+printf("Sim, este projecto foi desenvolvido com muito amor! ❤️\n");
+```
+
+**Made with ❤️, ☕ and lots of code.**
