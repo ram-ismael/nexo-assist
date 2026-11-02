@@ -37,7 +37,7 @@ const EVENT_DOT: Record<string, string> = {
 };
 
 /** Shaped like the loaded detail, so nothing jumps when it arrives. */
-export function TicketDetailSkeleton() {
+function TicketDetailSkeleton() {
   return (
     <div className="space-y-6" aria-hidden="true">
       <div className="space-y-2.5">

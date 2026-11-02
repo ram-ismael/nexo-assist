@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, newClientId, parseError, signedOut } from "@/lib/api-client";
+import { usePolling } from "@/lib/use-polling";
 
 export type LiveAction = {
   id: string;
@@ -25,7 +26,7 @@ export type PendingTurn = {
   finished: boolean;
 };
 
-export type TurnFailure = { message: string; retryable: boolean; messageId: string | null };
+type TurnFailure = { message: string; retryable: boolean; messageId: string | null };
 
 type StreamEvent =
   | { type: "accepted"; turnId: string; userMessage: MessageDTO; conversation: ConversationDTO }
@@ -40,17 +41,6 @@ type StreamEvent =
       notice: MessageDTO | null;
       conversation: ConversationDTO | null;
     };
-
-const POLL_MS = 3500;
-// With a person on the other side, poll faster so replies and "está
-// escrevendo…" show up within ~2 s.
-const HUMAN_POLL_MS = 2000;
-
-function pollInterval(conversation: ConversationDTO | null): number {
-  return conversation?.state === "waiting_analyst" || conversation?.state === "analyst_active"
-    ? HUMAN_POLL_MS
-    : POLL_MS;
-}
 
 /** Merge by seq and drop duplicates: polling, streaming and paging can overlap. */
 export function mergeMessages(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] {
@@ -110,26 +100,7 @@ export function useChat(initial: MessagePageDTO | null, initialAssistant: Assist
 
   // Polling keeps the employee in sync with analyst replies and state changes.
   // It pauses while the tab is hidden and during a streamed agent answer.
-  useEffect(() => {
-    if (!conversation?.id) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      if (document.visibilityState === "visible") await sync();
-      timer = setTimeout(tick, pollInterval(conversationRef.current));
-    };
-    timer = setTimeout(tick, pollInterval(conversationRef.current));
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void sync();
-    };
-    const onOnline = () => void sync();
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [conversation?.id, sync]);
+  usePolling(sync, conversation?.state, !!conversation?.id);
 
   const loadOlder = useCallback(async () => {
     const current = conversationRef.current;

@@ -3,7 +3,7 @@ import { normalizeText } from "@/domain/similarity";
 import type { Executor } from "@/server/db/client";
 import { knowledgeArticles } from "@/server/db/schema";
 
-export type ArticleHit = {
+type ArticleHit = {
   id: string;
   title: string;
   body: string;
@@ -31,7 +31,7 @@ const IGNORED = new Set([
   "das",
 ]);
 
-export function toTsQuery(query: string): string | null {
+function toTsQuery(query: string): string | null {
   const terms = normalizeText(query)
     .replace(/-/g, " ")
     .split(" ")
@@ -41,7 +41,7 @@ export function toTsQuery(query: string): string | null {
   return [...new Set(terms)].map((term) => `${term}:*`).join(" | ");
 }
 
-export function platformApplies(platforms: string[], deviceOs: string | null): boolean | null {
+function platformApplies(platforms: string[], deviceOs: string | null): boolean | null {
   if (platforms.length === 0 || !deviceOs) return null;
   const device = normalizeText(deviceOs);
   return platforms.some((platform) => normalizeText(platform) === device);

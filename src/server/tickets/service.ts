@@ -21,9 +21,9 @@ import type { TicketSnapshot } from "@/server/messages/blocks";
 export type TicketRow = typeof tickets.$inferSelect;
 export type TicketEventRow = typeof ticketEvents.$inferSelect;
 
-export type Actor = { id: string | null; kind: "employee" | "analyst" | "agent" | "system" };
+type Actor = { id: string | null; kind: "employee" | "analyst" | "agent" | "system" };
 
-export type NewTicketInput = {
+type NewTicketInput = {
   requesterId: string;
   type: TicketType;
   category: TicketCategory;

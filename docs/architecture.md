@@ -97,4 +97,4 @@ Para ligar a um service desk corporativo (ServiceNow, Jira SM, GLPI...):
 - Turnos do agent: `turnId`, latência total e do primeiro token, tokens de entrada/saída, se houve transferência ou descarte.
 - Falhas de ferramentas e do serviço de chamados com operação e tentativa.
 - `GET /api/health`: banco e presença de configuração do modelo (sem valores).
-- Retenção: `agent_*`, `ticket_events`, `audit_events` são dados de produto (sem expiração); `rate_limits` pode ser podado (`pruneRateLimits`).
+- Retenção: `agent_*`, `ticket_events`, `audit_events` são dados de produto (sem expiração); `rate_limits` guarda só a janela atual de cada chave (a primeira contagem de uma janela apaga as anteriores).

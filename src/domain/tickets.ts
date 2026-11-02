@@ -69,7 +69,7 @@ export const TYPE_LABEL: Record<TicketType, string> = {
   REQ: "Requisição",
 };
 
-export const REOPEN_WINDOW_DAYS = 7;
+const REOPEN_WINDOW_DAYS = 7;
 
 export function isOpenStatus(status: TicketStatus): boolean {
   return OPEN_STATUSES.includes(status);

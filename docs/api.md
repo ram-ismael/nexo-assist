@@ -29,7 +29,6 @@ Route Handlers em `src/app/api`, todos com o wrapper `route()` (`src/server/http
 | ----------------------- | ------- | ------------------------------------------ |
 | `POST /api/auth/login`  | público | `{ email, password, rememberMe }` → cookie |
 | `POST /api/auth/logout` | público | Revoga a sessão e apaga o cookie           |
-| `GET /api/me`           | logado  | Identidade da sessão                       |
 | `GET /api/health`       | público | Banco e configuração do modelo             |
 
 ## Conversa do funcionário

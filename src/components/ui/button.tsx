@@ -19,7 +19,7 @@ const sizes: Record<Size, string> = {
   lg: "h-12 px-5 text-[15px] gap-2",
 };
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
   size?: Size;
   loading?: boolean;

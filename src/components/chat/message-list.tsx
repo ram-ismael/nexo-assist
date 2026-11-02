@@ -24,7 +24,7 @@ type Viewer = "employee" | "analyst";
 // One shape language for every bubble: soft 18px corners, a 6px "tail" corner
 // on the sender's side, a hairline shadow. Live states reuse the same classes
 // so nothing changes shape when the real message replaces them.
-export const BUBBLE = {
+const BUBBLE = {
   base: "rounded-[18px] text-[15px] leading-[1.6] sm:text-[16px]",
   mine: "rounded-br-[6px] bg-navy px-4 py-2.5 text-white shadow-[0_1px_2px_rgba(27,36,49,0.18)]",
   agent:

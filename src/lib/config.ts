@@ -34,7 +34,7 @@ const schema = z.object({
   NODE_ENV: z.string().default("development"),
 });
 
-export type AppConfig = z.infer<typeof schema> & { calendar: BusinessCalendar };
+type AppConfig = z.infer<typeof schema> & { calendar: BusinessCalendar };
 
 let cached: AppConfig | null = null;
 

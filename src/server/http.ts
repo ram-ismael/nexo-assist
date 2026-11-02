@@ -12,7 +12,7 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 type Access = "public" | "user" | "employee" | "analyst";
 
-export type HandlerContext<P> = {
+type HandlerContext<P> = {
   req: NextRequest;
   params: P;
   requestId: string;
@@ -40,7 +40,7 @@ function assertSameOrigin(req: NextRequest): void {
   if (originHost !== host) throw new AppError("forbidden", "Origem da requisição não permitida.");
 }
 
-export function errorResponse(error: unknown, requestId: string): NextResponse<ApiErrorBody> {
+function errorResponse(error: unknown, requestId: string): NextResponse<ApiErrorBody> {
   if (error instanceof AppError) {
     return NextResponse.json(
       { error: { code: error.code, message: error.message, details: error.details, requestId } },

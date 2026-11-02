@@ -247,7 +247,7 @@ function stateConflictMessage(state: ConversationState, event: ConversationEvent
   return "Esta ação não é possível no estado atual da conversa.";
 }
 
-export type MessagePage = {
+type MessagePage = {
   messages: MessageRow[];
   hasMoreBefore: boolean;
 };

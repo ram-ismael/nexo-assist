@@ -3,7 +3,7 @@ export const ANALYST_HEARTBEAT_MS = 15_000;
 /** Three missed heartbeats and the analyst counts as offline. */
 export const ANALYST_ONLINE_TTL_MS = 45_000;
 
-export type AnalystPresence = { lastHeartbeatAt: Date; leftAt: Date | null };
+type AnalystPresence = { lastHeartbeatAt: Date; leftAt: Date | null };
 
 /** Connected now: a fresh heartbeat that came after the last sign-out/close. */
 export function analystOnline(presence: AnalystPresence, now = Date.now()): boolean {

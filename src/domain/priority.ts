@@ -16,14 +16,14 @@ export type PriorityFacts = {
   hasWorkaround: boolean;
 };
 
-export type PriorityRuleId =
+type PriorityRuleId =
   | "critical-collective-outage"
   | "high-person-blocked"
   | "high-same-day-commitment"
   | "low-non-urgent-request"
   | "medium-impaired-with-workaround";
 
-export type PriorityDecision = {
+type PriorityDecision = {
   priority: Priority;
   rule: PriorityRuleId;
   explanation: string;

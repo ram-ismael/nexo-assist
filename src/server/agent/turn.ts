@@ -46,7 +46,7 @@ export type StreamEvent =
       conversation: ConversationDTO | null;
     };
 
-export type SubmitResult =
+type SubmitResult =
   | { mode: "human" | "duplicate"; message: MessageDTO; conversation: ConversationDTO }
   | {
       mode: "agent";
