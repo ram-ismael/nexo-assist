@@ -9,19 +9,19 @@ Tudo o que aparece depois do login é estado real: mensagens, chamados, transfer
 
 ## Sumário
 
-1. [Como rodar](#1.-como-rodar)
-2. [Jornadas principais](#2.-jornadas-principais)
-3. [Arquitetura](#3.-arquitetura)
-4. [Como o agent decide](#4.-como-o-agent-decide)
-5. [Transparência das decisões](#5.-transparência-das-decisões)
-6. [Regras do service desk](#6.-regras-do-service-desk)
-7. [Persistência, tempo real e histórico](#7.-persistência-tempo-real-e-histórico)
-8. [Autenticação, autorização e segurança](#8.-autenticação-autorização-e-segurança)
-9. [Qualidade das decisões e testes](#9.-qualidade-das-decisões-e-testes)
-10. [Custo e desempenho](#10.-custo-e-desempenho)
-11. [Git e CI](#11.-git-e-ci)
-12. [Deploy](#12.-deploy)
-13. [Trade-offs e limitações](#13.-trade-offs-e-limitações)
+1. [Como rodar](#1-como-rodar)
+2. [Jornadas principais](#2-jornadas-principais)
+3. [Arquitetura](#3-arquitetura)
+4. [Como o agent decide](#4-como-o-agent-decide)
+5. [Transparência das decisões](#5-transparência-das-decisões)
+6. [Regras do service desk](#6-regras-do-service-desk)
+7. [Persistência, tempo real e histórico](#7-persistência-tempo-real-e-histórico)
+8. [Autenticação, autorização e segurança](#8-autenticação-autorização-e-segurança)
+9. [Qualidade das decisões e testes](#9-qualidade-das-decisões-e-testes)
+10. [Custo e desempenho](#10-custo-e-desempenho)
+11. [Git e CI](#11-git-e-ci)
+12. [Deploy](#12-deploy)
+13. [Trade-offs e limitações](#13-trade-offs-e-limitações)
 14. [O que faria com mais tempo](#14-o-que-faria-com-mais-tempo)
 
 Documentação detalhada em [`docs/`](docs): [arquitetura](docs/architecture.md), [agent](docs/agent.md), [regras](docs/business-rules.md), [API](docs/api.md), [segurança](docs/security.md), [testes](docs/testing.md), [deploy](docs/deployment.md) e [decisões](docs/decisions).
