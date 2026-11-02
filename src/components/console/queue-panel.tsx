@@ -41,10 +41,15 @@ function StatusLine({
         dot={cn("bg-danger", overdue && "animate-pulse")}
         tone="text-danger-text"
         title={
-          handoff ? [handoff.reason, handoff.ticketNumber].filter(Boolean).join(" · ") : undefined
+          handoff
+            ? [handoff.reason, `indicada ao ${handoff.targetLevel}`, handoff.ticketNumber]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
         }
       >
         {item.critical ? <strong className="font-semibold">Crítico</strong> : "Transferida"}
+        {handoff ? ` · ${handoff.targetLevel.replace("Suporte ", "")}` : null}
         {handoff?.respondBy ? (
           <>
             {" · "}

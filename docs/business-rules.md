@@ -70,4 +70,6 @@ Palavras-chave normalizadas (sem acento, sem palavras vazias, radical curto) de 
 
 ## Transferência
 
-Motivos: pedido do funcionário, caso crítico, chamado vencido, baixa segurança do agent, fora das ferramentas, falha técnica. O registro guarda resumo, chamados envolvidos, nível (N2 para crítico ou vencido, N1 nos demais) e prazo de primeira resposta humana (1 h corrida para crítico; prazo do chamado se ainda não venceu; senão 4 horas úteis).
+Motivos: pedido do funcionário, caso crítico, chamado vencido, baixa segurança do agent, fora das ferramentas, falha técnica. O registro guarda resumo, chamados envolvidos, nível indicado (N2 para crítico ou vencido, N1 nos demais) e prazo de primeira resposta humana (1 h corrida para crítico; prazo do chamado se ainda não venceu; senão 4 horas úteis).
+
+O nível é uma **indicação** para a equipe, não uma restrição: qualquer analista, N1 ou N2, vê e assume qualquer conversa, para que nada fique parado se o nível indicado não estiver online. Por isso o funcionário lê só "Transferida para o service desk" (nem a linha do sistema nem o agent prometem um nível); no console a conversa aparece como "indicada ao Suporte N2", e a aba _Para você_ lista primeiro as conversas indicadas ao nível de quem está olhando, depois as demais pelo prazo de primeiro contato.

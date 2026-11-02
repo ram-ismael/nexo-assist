@@ -62,7 +62,13 @@ function searchCondition(query: string): SQL | undefined {
 export async function listQueue(
   executor: Executor,
   analystId: string,
-  options: { filter: QueueFilter; query: string; limit?: number },
+  options: {
+    filter: QueueFilter;
+    query: string;
+    /** The analyst's own level: waiting cases recommended to it come first. */
+    analystLevel?: string | null;
+    limit?: number;
+  },
 ): Promise<QueueItemDTO[]> {
   const conditions = [
     filterCondition(options.filter, analystId),
@@ -78,6 +84,12 @@ export async function listQueue(
     .where(and(...conditions))
     .orderBy(
       sql`case ${conversations.state} when 'waiting_analyst' then 0 when 'analyst_active' then 1 when 'agent_active' then 2 else 3 end`,
+      // Among waiting conversations, those recommended to this analyst's level first.
+      sql`case when ${conversations.state} = 'waiting_analyst' and (
+        select h.target_level from ${handoffs} h
+        where h.conversation_id = ${conversations.id}
+        order by h.created_at desc limit 1
+      ) = ${options.analystLevel ?? null} then 0 else 1 end`,
       // Waiting conversations by urgency: the nearest (or most overdue)
       // first-contact deadline first, not by who wrote last.
       sql`case when ${conversations.state} = 'waiting_analyst' then (
@@ -113,6 +125,7 @@ export async function listQueue(
       .selectDistinctOn([handoffs.conversationId], {
         conversationId: handoffs.conversationId,
         reason: handoffs.reason,
+        targetLevel: handoffs.targetLevel,
         respondBy: handoffs.respondBy,
         createdAt: handoffs.createdAt,
         ticketIds: handoffs.ticketIds,
@@ -188,6 +201,7 @@ export async function listQueue(
         handoff && showHandoff
           ? {
               reason: HANDOFF_REASON_LABEL[handoff.reason],
+              targetLevel: handoff.targetLevel,
               respondBy: handoff.respondBy?.toISOString() ?? null,
               ticketNumber: handoff.ticketIds[0]
                 ? (ticketNumbers.get(handoff.ticketIds[0]) ?? null)

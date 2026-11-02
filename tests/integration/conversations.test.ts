@@ -297,6 +297,44 @@ describe("conversation lifecycle", () => {
     expect(withAgent).toMatchObject({ id: anaLive.id, agentBusy: true, hadHandoff: true });
   });
 
+  it("lists waiting conversations recommended to the analyst's own level first", async () => {
+    const ana = await sessionUser(ANA);
+    const carla = await sessionUser(CARLA);
+    const rafael = await sessionUser(RAFAEL); // Suporte N2
+    const marina = await sessionUser(MARINA); // Suporte N1
+    const anaLive = await getOrCreateLiveConversation(db(), ana.id);
+    await employeeRequestsAnalyst(ana, anaLive.id);
+    const carlaLive = await getOrCreateLiveConversation(db(), carla.id);
+    await employeeRequestsAnalyst(carla, carlaLive.id);
+    // Ana's case is recommended to N2 and is also the most urgent; Carla's to N1.
+    await db()
+      .update(handoffs)
+      .set({ targetLevel: "Suporte N2", respondBy: new Date(Date.now() - 60_000) })
+      .where(eq(handoffs.conversationId, anaLive.id));
+    await db()
+      .update(handoffs)
+      .set({ targetLevel: "Suporte N1", respondBy: new Date(Date.now() + 3_600_000) })
+      .where(eq(handoffs.conversationId, carlaLive.id));
+
+    const forRafael = await listQueue(db(), rafael.id, {
+      filter: "for_you",
+      query: "",
+      analystLevel: rafael.supportLevel,
+    });
+    expect(forRafael.map((item) => item.id)).toEqual([anaLive.id, carlaLive.id]);
+    expect(forRafael[0]?.handoff?.targetLevel).toBe("Suporte N2");
+
+    const forMarina = await listQueue(db(), marina.id, {
+      filter: "for_you",
+      query: "",
+      analystLevel: marina.supportLevel,
+    });
+    expect(forMarina.map((item) => item.id)).toEqual([carlaLive.id, anaLive.id]);
+
+    // A recommendation, not a restriction: the N1 analyst can assume the N2 case.
+    await expect(claimConversation(marina, anaLive.id)).resolves.toBeDefined();
+  });
+
   it("starts a new conversation only when the current one may end", async () => {
     const { ana, conversation } = await waitingConversation();
     // With a person on the other side and messages left, the session goes on.

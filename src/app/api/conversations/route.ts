@@ -27,7 +27,11 @@ export const GET = route("user", async ({ req, user }) => {
   }
   const params = queueQuery.parse(Object.fromEntries(req.nextUrl.searchParams));
   const [items, counts] = await Promise.all([
-    listQueue(db(), user.id, { filter: params.filter, query: params.q }),
+    listQueue(db(), user.id, {
+      filter: params.filter,
+      query: params.q,
+      analystLevel: user.supportLevel,
+    }),
     queueCounts(db(), user.id),
   ]);
   const { attention, ...filterCounts } = counts;

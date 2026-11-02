@@ -249,17 +249,25 @@ export function WideBlocks({
   );
 }
 
+/**
+ * The level is a recommendation for the analysts (any of them may assume the
+ * conversation), so the employee is only told it went to the service desk.
+ */
 export function HandoffLine({
   block,
   timeZone,
+  viewer,
 }: {
   block: Extract<MessageBlock, { type: "handoff" }>;
   timeZone: string;
+  viewer: "employee" | "analyst";
 }) {
   return (
     <span className="inline-flex items-center gap-2">
       <ArrowLeftRight className="size-4" aria-hidden="true" />
-      Transferida para {block.level}
+      {viewer === "employee"
+        ? "Transferida para o service desk"
+        : `Transferida · indicada ao ${block.level}`}
       {block.respondBy ? (
         <span className="text-ink-4">· resposta até {untilLabel(block.respondBy, timeZone)}</span>
       ) : null}

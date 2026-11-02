@@ -741,11 +741,11 @@ const requestHandoff = nexoTool({
     return {
       output: {
         transferido: true,
-        equipe: result.targetLevel,
+        equipe: "service desk",
         resposta_ate: result.respondBy.toISOString(),
         instrucao: "Avise o funcionário de forma breve e não faça mais nada nesta conversa.",
       },
-      summary: `Transferida para ${result.targetLevel} (${input.motivo}).`,
+      summary: `Transferida para o service desk, indicada ao ${result.targetLevel} (${input.motivo}).`,
     };
   },
 });

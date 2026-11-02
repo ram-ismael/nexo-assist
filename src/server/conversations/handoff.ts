@@ -35,6 +35,8 @@ export async function performHandoff(
   now = new Date(),
 ) {
   const critical = input.reason === "critical" || input.ticket?.priority === "critica";
+  // Recommended level: N2 for critical or overdue cases. The queue lists them
+  // first for N2 analysts, but any analyst may assume them.
   const overdue = input.ticket ? slaState(input.ticket.slaDueAt, now).overdue : false;
   const targetLevel =
     critical || overdue || input.reason === "overdue" ? "Suporte N2" : "Suporte N1";
@@ -80,7 +82,9 @@ export async function performHandoff(
       conversationId: conversation.id,
       kind: "system",
       senderId: null,
-      content: `Transferida para ${targetLevel}`,
+      // The level is a recommendation for the console, not a promise to the
+      // employee: any analyst may assume the conversation.
+      content: "Transferida para o service desk",
       blocks: [
         {
           type: "handoff",
