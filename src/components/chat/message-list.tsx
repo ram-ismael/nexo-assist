@@ -267,12 +267,14 @@ function ConsoleViewMessage({
 /** Reading pace of the live answer, and how long a backlog may take to catch up. */
 const REVEAL_CHARS_PER_SECOND = 90;
 const REVEAL_CATCH_UP_SECONDS = 0.6;
+const REVEAL_TICK_MS = 16;
 
 /**
  * How much of the streamed reply is on screen. Tokens are revealed at a steady
  * reading pace that speeds up when the model gets ahead, so a burst of tokens
- * never lands as a block. Paced by elapsed time, not frames, so a throttled
- * or background tab is never left behind. Reduced motion shows text as it arrives.
+ * never lands as a block. A timer paced by elapsed time drives it, not
+ * animation frames: a background or throttled tab still advances (in bigger
+ * steps) instead of freezing. Hidden tabs and reduced motion show it all.
  */
 function useRevealed(text: string): number {
   const [shown, setShown] = useState(0);
@@ -282,8 +284,9 @@ function useRevealed(text: string): number {
       last.current = null;
       return;
     }
-    const frame = requestAnimationFrame((now) => {
-      const elapsed = Math.min(1, (now - (last.current ?? now - 16)) / 1000);
+    const timer = setTimeout(() => {
+      const now = performance.now();
+      const elapsed = Math.min(1, (now - (last.current ?? now - REVEAL_TICK_MS)) / 1000);
       last.current = now;
       const behind = text.length - shown;
       const instant =
@@ -291,8 +294,8 @@ function useRevealed(text: string): number {
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const rate = Math.max(REVEAL_CHARS_PER_SECOND, behind / REVEAL_CATCH_UP_SECONDS);
       setShown(instant ? text.length : shown + Math.max(1, Math.round(rate * elapsed)));
-    });
-    return () => cancelAnimationFrame(frame);
+    }, REVEAL_TICK_MS);
+    return () => clearTimeout(timer);
   }, [shown, text.length]);
   return Math.min(shown, text.length);
 }

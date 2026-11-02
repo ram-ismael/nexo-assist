@@ -94,3 +94,11 @@ test("signing in again revokes the session the browser held before", async ({ pa
   await page.goto("/atendimento");
   await expect(page).toHaveURL(/\/entrar/);
 });
+
+test("privacy page lists the demo accounts and says any password works", async ({ page }) => {
+  await page.goto("/privacidade");
+  await expect(page.getByRole("heading", { name: "Contas de demonstração" })).toBeVisible();
+  await expect(page.getByText("Qualquer senha é aceita")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "ana.souza@nexo.com.br" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "marina.costa@nexo.com.br" })).toBeVisible();
+});

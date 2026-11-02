@@ -22,7 +22,7 @@ Tudo o que aparece depois do login é estado real: mensagens, chamados, transfer
 11. [Git e CI](#git-e-ci)
 12. [Deploy](#deploy)
 13. [Trade-offs e limitações](#trade-offs-e-limitações)
-14. [O que eu faria com mais tempo](#o-que-eu-faria-com-mais-tempo)
+14. [O que faria com mais tempo](#o-que-faria-com-mais-tempo)
 
 Documentação detalhada em [`docs/`](docs): [arquitetura](docs/architecture.md), [agent](docs/agent.md), [regras](docs/business-rules.md), [API](docs/api.md), [segurança](docs/security.md), [testes](docs/testing.md), [deploy](docs/deployment.md) e [decisões](docs/decisions).
 
@@ -39,7 +39,7 @@ pnpm dev                        # http://localhost:3000
 
 ### Acesso de demonstração
 
-Este é um ambiente com **dados fictícios** e o login é de demonstração (`DEMO_AUTH_ENABLED=true`): qualquer e-mail da tabela abaixo entra com **qualquer senha não vazia**. A tela de login não exibe esse aviso de propósito, para ficar igual a um produto real; a informação fica aqui. E-mails fora do seed não entram.
+Este é um ambiente com **dados fictícios** e o login é de demonstração (`DEMO_AUTH_ENABLED=true`): qualquer e-mail da tabela abaixo entra com **qualquer senha não vazia**. A tela de login não exibe esse aviso de propósito, para ficar igual a um produto real; a lista de contas e o aviso sobre a senha ficam aqui e na página **Privacidade e uso de dados** (`/privacidade`, link no rodapé do login), que lê as contas ativas do banco e só mostra a seção enquanto `DEMO_AUTH_ENABLED=true`. E-mails fora do seed não entram.
 
 | Perfil      | E-mail                      | Observação                                                    |
 | ----------- | --------------------------- | ------------------------------------------------------------- |
@@ -235,18 +235,18 @@ O CI roda tudo menos a avaliação com o modelo real, que é paga e fica como pa
 
 ## Deploy
 
-Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em [docs/deployment.md](docs/deployment.md):
+**Vercel + Neon**, sem servidor extra. Runbook completo, com todos os comandos, em [docs/deployment.md](docs/deployment.md).
 
-1. Criar o banco no Neon e usar a URL _pooled_ como `DATABASE_URL`.
-2. Configurar as variáveis na Vercel (chaves como _Sensitive_).
-3. `pnpm db:setup` contra o Neon (migrações são um passo explícito de release).
-4. Conectar o repositório: `main` em produção, demais branches em preview.
+- **Banco:** Neon `nexo-assist` (`aws-sa-east-1`), só o branch `main`. A aplicação usa a string _pooled_; migração e seed usam a direta.
+- **Aplicação:** projeto Vercel `nexo-assist`, ligado ao GitHub com `main` como branch de produção.
+- **Deploy automático:** todo commit que chega em `main` (merge do PR `dev → main`) publica a produção sozinho. Push em `dev` gera só um preview de build.
+- **Release:** `dev` → PR para `main` → CI verde → `pnpm db:migrate` no Neon se houver migração nova (antes do merge) → merge → conferir `GET /api/health`.
 
-**Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#estado).
+**Estado:** publicado em https://nexo-assist-two.vercel.app a partir de `main`. Rollback e verificação em [docs/deployment.md](docs/deployment.md#5-ponto-de-restauração-e-rollback).
 
 ## Trade-offs e limitações
 
-- **Polling em vez de WebSocket** entre funcionário e analista: simples e confiável na Vercel; custa até ~3 s de atraso e algumas consultas leves. Com mais escala, trocaria por um provedor de pub/sub (Ably, Pusher ou Neon logical replication) mantendo o mesmo cursor.
+- **Polling em vez de WebSocket** entre funcionário e analista: simples e confiável na Vercel; custa até ~2 s de atraso e algumas consultas leves. Com mais escala, trocaria por um provedor de pub/sub (Ably, Pusher ou Neon logical replication) mantendo o mesmo cursor.
 - **Memória própria em vez da memória do Mastra**: o histórico já está no Postgres com o modelo de dados do produto (blocos, rascunhos, decisões). Reconstruir o contexto a partir dele evita duas fontes da verdade. Conversas muito longas usam só as 16 últimas mensagens mais os fatos do turno; um resumo incremental gerado pelo modelo seria o próximo passo.
 - **Busca full-text em vez de vetorial**: com 10 artigos, o full-text em português com stemming é suficiente, determinístico e grátis.
 - **Login de demonstração** aceita qualquer senha para e-mails do seed. Inaceitável com dados reais.
@@ -256,11 +256,22 @@ Pensado para **um projeto Vercel + Neon**, sem servidor extra. Passo a passo em 
 - **Lido/não lido** na fila é compartilhado entre analistas (um marcador por conversa), não individual.
 - **"Escrevendo…" por polling**: aparece com até ~2 s de atraso; instantâneo exigiria um canal de push (WebSocket).
 
-## O que eu faria com mais tempo
+## O que faria com mais tempo
 
-- SSO corporativo (OIDC) e papéis N1/N2 com filas separadas.
-- Push em tempo real e notificações para o analista.
-- Resumo incremental da conversa e avaliação contínua das decisões (scores do Mastra sobre turnos reais).
-- Adaptador para o sistema de chamados corporativo real, com outbox para mutações.
-- Painel de métricas (resolução sem fila, SLA cumprido, custo por conversa).
-- Testes de carga para o cenário de 2.000 funcionários (não foram executados).
+Se tivesse mais tempo para desenvolver o projeto, minha prioridade seria tornar o agent mais confiável, reduzir os custos de operação e melhorar a experiência dos funcionários. Mais do que adicionar funcionalidades, gostaria de garantir que o sistema resolve problemas reais com menos intervenção dos analistas.
+
+**Começaria pela capacidade de diagnóstico do agent.** Se um funcionário disser "Continuo com o mesmo problema de ontem", o agent deve consultar o histórico, identificar o chamado anterior e entender o que já foi feito, em vez de recomeçar ou abrir outro chamado. Também testaria mais situações em que a IA não consegue resolver, garantindo que a transferência, que hoje já pausa o agent quando o analista assume, leve sempre todo o contexto necessário.
+
+Outro ponto importante seria **saber quanto custa de fato cada atendimento**. Os tokens, o modelo e cada chamada de ferramenta já ficam registrados por turno (`agent_turns`, `agent_actions`); faltaria transformar isso em custo por atendimento e acompanhar. Assim daria para ver, por exemplo, se estamos gastando demais com pedidos simples que um modelo mais econômico resolveria. O contexto enviado ao modelo já se limita às mensagens recentes e aos fatos do turno; o próximo passo seria um resumo incremental da conversa, para manter só o necessário sem perder qualidade.
+
+**Na experiência de uso, o foco seria o chat.** Permitiria que o funcionário enviasse capturas de tela ou fotos do erro, porque nem sempre é fácil explicar um problema técnico por texto. Outra funcionalidade interessante seria o atendimento por voz: o funcionário explica o problema falando, o sistema converte o áudio em texto e, se necessário, responde também por voz. Com imagem e áudio, o custo desse processamento entraria na mesma medição por atendimento.
+
+Depois, **criaria um painel para acompanhar os resultados do agent**. Não bastaria saber quantas mensagens foram trocadas ou quantos chamados foram abertos. Gostaria de saber quantos problemas a IA resolveu sem ajuda humana, quantos precisaram de um analista, quanto tempo levaram para ser resolvidos e quantos chamados foram reabertos. Se muitos funcionários voltarem com o mesmo problema depois de o agent considerá-lo resolvido, as soluções propostas não estão funcionando. Essas métricas mostrariam exatamente onde melhorar.
+
+Também faria **testes de carga para saber até onde a infraestrutura aguenta**. O sistema foi pensado para uma empresa de cerca de 2.000 funcionários, o que não significa todos no chat ao mesmo tempo. Simularia diferentes volumes de usuários simultâneos, mensagens, respostas em streaming e consultas de atualização (polling), acompanhando tempo de resposta, duração das funções e desempenho do banco. Com esses números, daria para identificar os pontos mais lentos e decidir se é preciso aumentar recursos ou só otimizar o que já existe.
+
+Por último, exploraria **um aplicativo desktop para ajudar no diagnóstico dos computadores**, como um componente separado desta aplicação web. Usaria Avalonia UI com C#/.NET, minha stack para aplicativos nativos, e um Windows Service separado para executar operações locais autorizadas. Se um funcionário disser "Meu computador ficou lento depois da última atualização do Windows", em vez de depender só do relato, o agent poderia pedir ao serviço local dados de CPU, memória, espaço em disco, processos e eventos do Windows, e com isso identificar melhor a causa. Operações simples, como limpar arquivos temporários autorizados, também poderiam ser executadas com as devidas permissões e com registro de tudo o que foi feito.
+
+Não avançaria com tudo ao mesmo tempo. **Começaria pela confiabilidade do agent, pela medição de custos e pela qualidade do atendimento**, porque têm impacto direto na operação. As funcionalidades mais avançadas, como voz e diagnóstico local, viriam aos poucos, depois de avaliar o benefício real de cada uma.
+
+No fundo, o objetivo é que o sistema não se limite a responder aos funcionários, mas resolva cada vez mais incidentes, reduza o trabalho repetitivo dos analistas e mantenha os custos sob controle.
