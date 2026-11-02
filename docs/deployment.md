@@ -244,4 +244,4 @@ vercel deploy --prod
 
 - Produção em https://nexo-assist-two.vercel.app, publicada a partir de `main` pela integração GitHub.
 - Banco Neon `main` com as migrações `0000` a `0006` aplicadas e o seed de demonstração (seis conversas `demo-seed`).
-- Funções na região `iad1` (padrão da Vercel) e banco em `sa-east-1`. Mudar as funções para `gru1` (São Paulo) em _Settings_ → _Functions_ reduz a latência de cada consulta; é uma melhoria de desempenho, não um requisito.
+- Funções na região `gru1` (São Paulo), fixada em `vercel.json`, ao lado do banco em `sa-east-1`: cada consulta ao Postgres fica dentro da mesma região.
