@@ -1,8 +1,8 @@
-import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import * as schema from "@/server/db/schema";
+import { clearBusinessData } from "@/server/db/reset";
 import { seedDatabase } from "@/server/db/seed";
 
 async function main(): Promise<void> {
@@ -10,11 +10,7 @@ async function main(): Promise<void> {
   const db = drizzle(pool, { schema });
   try {
     await migrate(db, { migrationsFolder: "./drizzle" });
-    await db.execute(sql`
-      truncate agent_actions, agent_decisions, agent_turns, ticket_drafts, handoffs, messages,
-        conversations, ticket_events, tickets, sessions, analyst_presence, audit_events,
-        rate_limits, knowledge_articles, users restart identity cascade`);
-    await db.execute(sql`select setval('inc_number_seq', 20520, false)`);
+    await clearBusinessData(db);
     await seedDatabase(db, {
       timeZone: "America/Sao_Paulo",
       dayStartHour: 8,

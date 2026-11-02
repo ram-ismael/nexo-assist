@@ -222,6 +222,20 @@ Para trocar conversas de teste por histórias de demonstração limpas:
 
 Foi assim em 2026-11-02: duas conversas de teste (Ana Souza e Bruno Tavares) foram removidas e recriadas pelo seed.
 
+### Recriar a demonstração do zero
+
+As idades dos chamados do seed são relativas ao dia em que ele rodou (o INC-20150 nasce "resolvido há 4 dias", o INC-20311 "vencido há 6"). Com o passar dos dias elas envelhecem: o INC-20150 sai da janela de reabertura de 7 dias, por exemplo. Antes de enviar o link para avaliação, recrie tudo com as idades de hoje:
+
+```bash
+set -a; . ./.env.neon; set +a
+# anote a hora (UTC) para poder usar o restore por horário, se precisar
+DATABASE_URL="$DATABASE_URL_UNPOOLED" \
+CONFIRM_RESET_DEMO="<host do Neon, sem -pooler>" \
+pnpm db:reset-demo
+```
+
+O comando apaga **todos** os dados de negócio (conversas, chamados, usuários, artigos, sessões) e roda o seed completo. Sem `CONFIRM_RESET_DEMO` igual ao host do banco, ele se recusa a rodar e mostra o host esperado.
+
 ## 5. Ponto de restauração e rollback
 
 Sem branches extras no Neon: o projeto usa só o `main`.
