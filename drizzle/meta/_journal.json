@@ -43,6 +43,13 @@
       "when": 1793373895626,
       "tag": "0005_employee_read_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793613126536,
+      "tag": "0006_analyst_left_at",
+      "breakpoints": true
     }
   ]
 }

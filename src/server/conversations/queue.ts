@@ -15,7 +15,7 @@ import { ABANDONED_TURN_MS } from "./repository";
 import { employeeOnline, employeeTyping } from "./serialize";
 
 export const QUEUE_FILTERS = ["all", "for_you", "with_agent", "mine"] as const;
-export type QueueFilter = (typeof QUEUE_FILTERS)[number];
+type QueueFilter = (typeof QUEUE_FILTERS)[number];
 
 const RECENTLY_CLOSED_DAYS = 7;
 const OPEN_STATES = ["agent_active", "waiting_analyst", "analyst_active"] as const;

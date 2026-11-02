@@ -43,7 +43,7 @@ export function ActionTrail({
       >
         <span className="text-ink font-semibold">{name}</span>
         {badge ? (
-          <span className="bg-primary-soft text-primary-text -ml-1.5 rounded px-1.5 text-[11px] leading-[18px] font-semibold">
+          <span className="bg-primary-soft text-primary-text -ml-1.5 rounded px-1.5 text-[11px] leading-4.5 font-semibold">
             {badge}
           </span>
         ) : null}

@@ -26,7 +26,7 @@ function stem(token: string): string {
   return token.length > 5 ? token.slice(0, 5) : token;
 }
 
-export function keywords(value: string): Set<string> {
+function keywords(value: string): Set<string> {
   const tokens = normalizeText(value)
     .split(" ")
     .filter((token) => token.length > 2 || /^\d+$/.test(token))
@@ -35,14 +35,14 @@ export function keywords(value: string): Set<string> {
   return new Set(tokens);
 }
 
-export type DuplicateCandidate = {
+type DuplicateCandidate = {
   id: string;
   title: string;
   description: string;
   category: TicketCategory;
 };
 
-export type DuplicateMatch<T extends DuplicateCandidate> = {
+type DuplicateMatch<T extends DuplicateCandidate> = {
   ticket: T;
   score: number;
   sharedTerms: string[];

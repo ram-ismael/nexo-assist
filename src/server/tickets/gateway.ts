@@ -5,7 +5,7 @@ import { log } from "@/server/log";
 import { TicketService } from "./service";
 
 /** Raised for failures worth retrying (timeouts, connection drops, injected blips). */
-export class TransientServiceError extends Error {
+class TransientServiceError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "TransientServiceError";
@@ -59,7 +59,7 @@ async function withTimeout<T>(promise: Promise<T>, operation: string): Promise<T
   }
 }
 
-export type TicketCallInfo = { attempts: number };
+type TicketCallInfo = { attempts: number };
 
 /**
  * Every call to the ticket service goes through here. Each attempt runs in its

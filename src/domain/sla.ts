@@ -52,7 +52,7 @@ function isoWeekday(date: TZDate): number {
   return day === 0 ? 7 : day;
 }
 
-export function isBusinessDay(date: TZDate, calendar: BusinessCalendar): boolean {
+function isBusinessDay(date: TZDate, calendar: BusinessCalendar): boolean {
   return calendar.workdays.includes(isoWeekday(date)) && !calendar.holidays.has(dateKey(date));
 }
 
@@ -117,7 +117,7 @@ export function computeDueAt(startedAt: Date, policy: SlaPolicy, calendar: Busin
   return addBusinessMinutes(startedAt, policy.minutes, calendar);
 }
 
-export type SlaState = {
+type SlaState = {
   dueAt: Date;
   overdue: boolean;
   /** Minutes past the deadline (0 when on time). */

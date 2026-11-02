@@ -114,12 +114,18 @@ export function contactLabel(iso: string, timeZone: string, now = new Date()): s
   return `contato até ${untilLabel(iso, timeZone, now)}`;
 }
 
-/** WhatsApp-style "visto por último hoje às 10:42" / "ontem às 18:20" / "28 out às 09:10". */
-export function lastSeenLabel(iso: string, timeZone: string, now = new Date()): string {
-  const label = dayLabel(iso, timeZone, now);
-  const time = formatTime(iso, timeZone);
-  const day = label === "Hoje" || label === "Ontem" ? label.toLowerCase() : label;
-  return `visto por último ${day} às ${time}`;
+/**
+ * WhatsApp-style presence: "Online", or "Offline há 5 min" counted from the
+ * last activity the server recorded ("Offline" when there is none).
+ */
+export function presenceLabel(
+  online: boolean,
+  lastSeenAt: string | null,
+  now = new Date(),
+): string {
+  if (online) return "Online";
+  if (!lastSeenAt) return "Offline";
+  return `Offline há ${durationLabel(now.getTime() - new Date(lastSeenAt).getTime())}`;
 }
 
 export function initials(name: string): string {

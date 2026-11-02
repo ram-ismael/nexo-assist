@@ -39,8 +39,6 @@ export class AppError extends Error {
 const FEMININE = new Set(["Conversa"]);
 export const notFound = (what = "Registro") =>
   new AppError("not_found", `${what} não ${FEMININE.has(what) ? "encontrada" : "encontrado"}.`);
-export const forbidden = () =>
-  new AppError("forbidden", "Você não tem permissão para acessar este recurso.");
 export const conflict = (message: string, details?: Record<string, unknown>) =>
   new AppError("conflict", message, details);
 

@@ -52,7 +52,15 @@ export type ConversationDTO = {
   /** Employee messages in this session and the PRD limit (30), whoever answers. */
   sessionMessageCount: number;
   sessionMessageLimit: number;
-  assignedAnalyst: { id: string; name: string; supportLevel: string | null } | null;
+  assignedAnalyst: {
+    id: string;
+    name: string;
+    supportLevel: string | null;
+    /** The analyst's console is open right now (fresh heartbeat). */
+    online: boolean;
+    /** Last heartbeat: "offline há 5 min" counts from here. */
+    lastSeenAt: string | null;
+  } | null;
   employee: { id: string; name: string; email: string; department: string };
   lastActivityAt: string;
   closedAt: string | null;

@@ -16,7 +16,6 @@
   --color-ink-4: #8a919c;
   --color-rule: #e6e8ec;
   --color-navy: #1e2633;
-  --color-navy-2: #283141;
   --color-primary: #0285f7;
   --color-primary-text: #0069c7;
   --color-primary-soft: #eaf4fe;
@@ -46,7 +45,6 @@
 
   --animate-rise: rise 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-fade: fade 160ms ease-out both;
-  --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
   --animate-typing: typing 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   --animate-caret: caret 1s steps(1) infinite;
   --animate-pop: pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -120,16 +118,6 @@
     }
     50% {
       opacity: 0;
-    }
-  }
-  @keyframes pulse-dot {
-    0%,
-    80%,
-    100% {
-      opacity: 0.25;
-    }
-    40% {
-      opacity: 1;
     }
   }
 }

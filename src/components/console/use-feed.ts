@@ -3,12 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, errorMessage } from "@/lib/api-client";
+import { usePolling } from "@/lib/use-polling";
 import { mergeMessages } from "@/components/chat/use-chat";
-
-const POLL_MS = 3000;
-// While a person is on the employee side of the conversation, poll faster so
-// messages and "está escrevendo…" show up within ~2 s.
-const HUMAN_POLL_MS = 2000;
 
 /**
  * Messages of one conversation for the console: latest page first, older
@@ -25,6 +21,7 @@ export function useFeed(conversationId: string) {
   const [olderError, setOlderError] = useState<string | null>(null);
   /** False while incremental sync is failing; the panel says the view may be stale. */
   const [connected, setConnected] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   const messagesRef = useRef<MessageDTO[]>([]);
 
   useLayoutEffect(() => {
@@ -45,7 +42,14 @@ export function useFeed(conversationId: string) {
     return () => {
       active = false;
     };
-  }, [conversationId]);
+  }, [conversationId, attempt]);
+
+  /** Retries the first page after it failed to load. */
+  const reload = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    setAttempt((value) => value + 1);
+  }, []);
 
   const sync = useCallback(async () => {
     const last = messagesRef.current[messagesRef.current.length - 1]?.seq ?? 0;
@@ -65,35 +69,8 @@ export function useFeed(conversationId: string) {
     }
   }, [conversationId]);
 
-  const stateRef = useRef<ConversationDTO["state"] | undefined>(undefined);
-  useLayoutEffect(() => {
-    stateRef.current = conversation?.state;
-  }, [conversation?.state]);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const interval = () =>
-      stateRef.current === "analyst_active" || stateRef.current === "waiting_analyst"
-        ? HUMAN_POLL_MS
-        : POLL_MS;
-    const tick = async () => {
-      if (document.visibilityState === "visible") await sync();
-      timer = setTimeout(tick, interval());
-    };
-    timer = setTimeout(tick, interval());
-    // Catch up at once when the tab comes back or the network returns.
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void sync();
-    };
-    const onOnline = () => void sync();
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [sync]);
+  // Incremental sync only makes sense once the first page is on screen.
+  usePolling(sync, conversation?.state, !loading && !error);
 
   const loadOlder = useCallback(async () => {
     const first = messagesRef.current[0];
@@ -128,6 +105,7 @@ export function useFeed(conversationId: string) {
     olderError,
     connected,
     loadOlder,
+    reload,
     sync,
     add,
   };

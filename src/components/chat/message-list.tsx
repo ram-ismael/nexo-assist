@@ -1,12 +1,20 @@
 "use client";
 
-import { ArrowDown, Check, CheckCheck, Headset } from "lucide-react";
-import { Fragment, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowDown, Check, CheckCheck, Headset, RotateCcw } from "lucide-react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { MessageDTO } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 import { dayLabel, formatTime, isSameDay } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Spinner, TypingDots } from "@/components/ui/spinner";
+import { Skeleton, Spinner, TypingDots } from "@/components/ui/spinner";
 import { ActionTrail } from "./action-trail";
 import { HandoffLine, InlineBlocks, WideBlocks, type BlockHandlers } from "./blocks";
 import type { PendingTurn } from "./use-chat";
@@ -16,7 +24,7 @@ type Viewer = "employee" | "analyst";
 // One shape language for every bubble: soft 18px corners, a 6px "tail" corner
 // on the sender's side, a hairline shadow. Live states reuse the same classes
 // so nothing changes shape when the real message replaces them.
-export const BUBBLE = {
+const BUBBLE = {
   base: "rounded-[18px] text-[15px] leading-[1.6] sm:text-[16px]",
   mine: "rounded-br-[6px] bg-navy px-4 py-2.5 text-white shadow-[0_1px_2px_rgba(27,36,49,0.18)]",
   agent:
@@ -256,7 +264,46 @@ function ConsoleViewMessage({
   );
 }
 
-function PendingReply({ pending }: { pending: PendingTurn }) {
+/** Reading pace of the live answer, and how long a backlog may take to catch up. */
+const REVEAL_CHARS_PER_SECOND = 90;
+const REVEAL_CATCH_UP_SECONDS = 0.6;
+
+/**
+ * How much of the streamed reply is on screen. Tokens are revealed at a steady
+ * reading pace that speeds up when the model gets ahead, so a burst of tokens
+ * never lands as a block. Paced by elapsed time, not frames, so a throttled
+ * or background tab is never left behind. Reduced motion shows text as it arrives.
+ */
+function useRevealed(text: string): number {
+  const [shown, setShown] = useState(0);
+  const last = useRef<number | null>(null);
+  useEffect(() => {
+    if (shown >= text.length) {
+      last.current = null;
+      return;
+    }
+    const frame = requestAnimationFrame((now) => {
+      const elapsed = Math.min(1, (now - (last.current ?? now - 16)) / 1000);
+      last.current = now;
+      const behind = text.length - shown;
+      const instant =
+        document.visibilityState === "hidden" ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const rate = Math.max(REVEAL_CHARS_PER_SECOND, behind / REVEAL_CATCH_UP_SECONDS);
+      setShown(instant ? text.length : shown + Math.max(1, Math.round(rate * elapsed)));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [shown, text.length]);
+  return Math.min(shown, text.length);
+}
+
+function PendingReply({ pending, onRevealed }: { pending: PendingTurn; onRevealed?: () => void }) {
+  const shown = useRevealed(pending.reply);
+  const complete = shown >= pending.reply.length;
+  useEffect(() => {
+    if (pending.finished && complete) onRevealed?.();
+  }, [pending.finished, complete, onRevealed]);
+  const visible = pending.reply.slice(0, shown);
   return (
     <>
       {pending.text && !pending.accepted ? (
@@ -284,12 +331,12 @@ function PendingReply({ pending }: { pending: PendingTurn }) {
               "animate-rise max-w-[min(680px,88%)]",
               BUBBLE.base,
               BUBBLE.agent,
-              !pending.reply && "flex h-12 items-center",
+              !visible && "flex h-12 items-center",
             )}
           >
-            {pending.reply ? (
+            {visible ? (
               <p className="text-ink [overflow-wrap:anywhere] whitespace-pre-wrap">
-                {pending.reply}
+                {visible}
                 <span
                   aria-hidden="true"
                   className="animate-caret bg-primary ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] rounded-full"
@@ -312,6 +359,58 @@ function PendingReply({ pending }: { pending: PendingTurn }) {
 }
 
 /**
+ * Shown while the first page of a conversation loads: shaped like the real
+ * messages, in the same column, so loading never reads as "no messages yet".
+ */
+export function MessagesSkeleton({ layout }: { layout: "employee" | "console" }) {
+  const employee = layout === "employee";
+  // The employee's own messages sit on the right in their chat, on the left in the console.
+  const mine = employee ? "ml-auto" : "";
+  const theirs = employee ? "" : "ml-auto";
+  return (
+    <div
+      className={cn("min-h-0 flex-1 overflow-hidden", employee ? "bg-paper" : "bg-chat")}
+      role="status"
+      aria-label="Carregando mensagens"
+    >
+      <div
+        className={cn(
+          "mx-auto flex w-full flex-col",
+          employee ? `${EMPLOYEE_COLUMN} gap-6 pt-8` : "gap-4 px-4 py-6 sm:px-10",
+        )}
+        aria-hidden="true"
+      >
+        <Skeleton className={cn("h-11 w-2/5 rounded-[18px]", mine)} />
+        <div className={cn("w-3/5 space-y-2", theirs)}>
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-20 w-full rounded-[18px]" />
+        </div>
+        <Skeleton className={cn("h-11 w-1/3 rounded-[18px]", mine)} />
+        <div className={cn("w-1/2 space-y-2", theirs)}>
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="h-16 w-full rounded-[18px]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The first page of a conversation failed to load: say so and offer a retry. */
+export function MessagesError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
+    >
+      <p className="text-danger-text text-[15px]">{message}</p>
+      <Button size="sm" variant="secondary" onClick={onRetry}>
+        <RotateCcw className="size-3.5" aria-hidden="true" /> Tentar de novo
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Reversed infinite history: opens at the latest page, fetches older pages as
  * the reader scrolls up and keeps the visible message anchored while prepending.
  */
@@ -326,6 +425,7 @@ export function MessageList({
   onLoadOlder,
   handlersFor,
   pending,
+  onPendingRevealed,
   outgoing,
   inPlace,
   typing,
@@ -343,6 +443,8 @@ export function MessageList({
   onLoadOlder: () => void;
   handlersFor: (message: MessageDTO, isLast: boolean) => BlockHandlers;
   pending?: PendingTurn | null;
+  /** The live answer is fully on screen and can be swapped for the stored message. */
+  onPendingRevealed?: () => void;
   /** Console: the analyst's reply between send and server confirmation. */
   outgoing?: string | null;
   /** Messages that replace a bubble already on screen (a streamed answer). */
@@ -398,17 +500,27 @@ export function MessageList({
     previous.current = { first: firstSeq, last: lastSeq, count: messages.length };
   }, [firstSeq, lastSeq, messages, viewer]);
 
-  // Keep following the streamed answer (and a typing bubble that appears)
-  // while the reader is at the bottom; never pull someone reading history.
-  const showsTyping = !!typing;
-  useLayoutEffect(() => {
-    if ((pending || showsTyping) && atBottom) scrollToBottom();
-  }, [pending, showsTyping, atBottom, scrollToBottom]);
+  // Keep following whatever grows at the end (the answer being revealed, a
+  // typing bubble, a card) while the reader is at the bottom; never pull
+  // someone who scrolled up to read history.
+  const column = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+  useEffect(() => {
+    const element = scroller.current;
+    const content = column.current;
+    if (!element || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (following.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   const onScroll = () => {
     const element = scroller.current;
     if (!element) return;
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+    following.current = distance < NEAR_BOTTOM_PX;
     setAtBottom(distance < NEAR_BOTTOM_PX);
     if (distance < NEAR_BOTTOM_PX && unseen > 0) setUnseen(0);
     if (element.scrollTop < NEAR_TOP_PX && hasMoreBefore && !loadingOlder && !olderError) {
@@ -432,6 +544,7 @@ export function MessageList({
         aria-busy={loadingOlder}
       >
         <div
+          ref={column}
           className={cn(
             "mx-auto flex w-full flex-col",
             layout === "employee"
@@ -515,7 +628,7 @@ export function MessageList({
               </Fragment>
             );
           })}
-          {pending ? <PendingReply pending={pending} /> : null}
+          {pending ? <PendingReply pending={pending} onRevealed={onPendingRevealed} /> : null}
           {typing}
           {outgoing ? (
             <div className="animate-rise flex flex-col items-end gap-1">

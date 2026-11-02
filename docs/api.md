@@ -29,7 +29,6 @@ Route Handlers em `src/app/api`, todos com o wrapper `route()` (`src/server/http
 | ----------------------- | ------- | ------------------------------------------ |
 | `POST /api/auth/login`  | público | `{ email, password, rememberMe }` → cookie |
 | `POST /api/auth/logout` | público | Revoga a sessão e apaga o cookie           |
-| `GET /api/me`           | logado  | Identidade da sessão                       |
 | `GET /api/health`       | público | Banco e configuração do modelo             |
 
 ## Conversa do funcionário
@@ -70,4 +69,4 @@ Route Handlers em `src/app/api`, todos com o wrapper `route()` (`src/server/http
 | `POST /api/conversations/:id/return` | Devolver ao agent                                       |
 | `POST /api/conversations/:id/close`  | Encerrar                                                |
 | `POST /api/conversations/:id/read`   | Marca como lida                                         |
-| `GET/PUT /api/analysts/presence`     | Disponibilidade e heartbeat                             |
+| `GET/PUT /api/analysts/presence`     | Disponibilidade, heartbeat e `{ leaving: true }`        |

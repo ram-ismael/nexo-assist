@@ -7,10 +7,30 @@ test("streams the answer in place and shows real typing between employee and ana
   const employee = await (await browser.newContext()).newPage();
   await login(employee, "fabio.nunes@nexo.com.br");
 
-  // The agent's answer is written into one live bubble that becomes the message.
+  // The agent's answer is written into one live bubble that becomes the message:
+  // dots while it works, then the text grows progressively, never as one block.
+  await employee.evaluate(() => {
+    const samples: { dots: boolean; text: number }[] = [];
+    Object.assign(window, { liveSamples: samples });
+    const timer = setInterval(() => {
+      const live = document.querySelector('[aria-busy="true"]');
+      if (!live) return;
+      samples.push({
+        dots: !!live.querySelector('[aria-label*="Nexo Assist"], [aria-label*="Enviando"]'),
+        text: live.querySelector("p")?.textContent?.length ?? 0,
+      });
+      if (samples.length > 1500) clearInterval(timer);
+    }, 20);
+  });
   await send(employee, "Qual o status do meu chamado?");
   await expect(employee.getByText("consultou seus chamados").first()).toBeVisible();
   await expect(employee.locator(".animate-caret")).toHaveCount(0);
+  const samples = await employee.evaluate(
+    () => (window as unknown as { liveSamples: { dots: boolean; text: number }[] }).liveSamples,
+  );
+  expect(samples.some((sample) => sample.dots)).toBe(true);
+  const partial = new Set(samples.map((sample) => sample.text).filter((length) => length > 0));
+  expect(partial.size).toBeGreaterThan(3);
   await expect(employee.getByRole("button", { name: "Por quê?" })).toHaveCount(1);
 
   await employee.getByRole("button", { name: "Mais opções" }).click();
@@ -25,6 +45,10 @@ test("streams the answer in place and shows real typing between employee and ana
   await analyst.getByRole("button", { name: "Assumir atendimento" }).click();
   const reply = analyst.getByPlaceholder(/Responder para Fábio/);
   await expect(reply).toBeVisible();
+  // The employee sees who is serving them and that the analyst is really online.
+  await expect(employee.getByRole("status", { name: "Marina Costa · Online" })).toBeVisible({
+    timeout: 8_000,
+  });
 
   // Analyst types: the employee sees it; sending ends it with the message.
   await reply.fill("Oi, Fábio! Já estou olhando");
@@ -47,4 +71,10 @@ test("streams the answer in place and shows real typing between employee and ana
   await expect(analyst.getByRole("status", { name: "Fábio está escrevendo" })).toBeHidden({
     timeout: 8_000,
   });
+
+  // Closing the console takes the analyst offline at once, counted from that moment.
+  await analyst.close({ runBeforeUnload: true });
+  await expect(
+    employee.getByRole("status", { name: "Marina Costa · Offline há 1 min" }),
+  ).toBeVisible({ timeout: 8_000 });
 });

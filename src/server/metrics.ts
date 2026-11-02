@@ -4,6 +4,7 @@ import { db } from "@/server/db/client";
 import { errorFields, log } from "@/server/log";
 import type { Priority } from "@/domain/tickets";
 import { DEMO_SEED_MODEL } from "@/server/db/demo";
+import { ANALYST_ONLINE_SQL } from "@/server/presence";
 
 export type PublicMetrics = {
   avgFirstResponseSeconds: number | null;
@@ -56,7 +57,7 @@ export async function publicMetrics(): Promise<PublicMetrics> {
         (select avg(ms)::float from recent_turns) as avg_ms,
         (select count(*)::int from recent_conversations) as conversations,
         (select count(*)::int from recent_conversations where not handed_off) as without_handoff,
-        (select count(*)::int from analyst_presence where available and last_heartbeat_at > now() - interval '2 minutes') as online
+        (select count(*)::int from analyst_presence where available and ${ANALYST_ONLINE_SQL}) as online
     `);
     const row = result.rows[0];
     if (!row) return UNKNOWN;

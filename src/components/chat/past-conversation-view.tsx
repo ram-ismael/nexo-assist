@@ -1,36 +1,15 @@
 "use client";
 
-import { ArrowLeft, RotateCcw } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { MessagePageDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/spinner";
-import { EMPLOYEE_COLUMN, MessageList } from "./message-list";
+import { EMPLOYEE_COLUMN, MessageList, MessagesError, MessagesSkeleton } from "./message-list";
 import type { PastItem } from "./past-conversations";
 
 const NO_HANDLERS = () => ({ onChanged: () => undefined });
-
-/** Shaped like a conversation, in the same column as the real one. */
-function ConversationSkeleton() {
-  return (
-    <div className="min-h-0 flex-1 overflow-hidden" aria-hidden="true">
-      <div className={`${EMPLOYEE_COLUMN} space-y-6 pt-8`}>
-        <Skeleton className="ml-auto h-11 w-2/5 rounded-[18px]" />
-        <div className="space-y-2">
-          <Skeleton className="h-3 w-48" />
-          <Skeleton className="h-20 w-3/5 rounded-[18px]" />
-        </div>
-        <Skeleton className="ml-auto h-11 w-1/3 rounded-[18px]" />
-        <div className="space-y-2">
-          <Skeleton className="h-3 w-40" />
-          <Skeleton className="h-16 w-1/2 rounded-[18px]" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /**
  * A previous conversation shown in the chat area itself, read-only, with a
@@ -98,24 +77,15 @@ export function PastConversationView({
   return (
     <>
       {error ? (
-        <div
-          role="alert"
-          className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
-        >
-          <p className="text-danger-text text-[15px]">{error}</p>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setError(null);
-              setAttempt((value) => value + 1);
-            }}
-          >
-            <RotateCcw className="size-3.5" aria-hidden="true" /> Tentar de novo
-          </Button>
-        </div>
+        <MessagesError
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setAttempt((value) => value + 1);
+          }}
+        />
       ) : !page ? (
-        <ConversationSkeleton />
+        <MessagesSkeleton layout="employee" />
       ) : (
         <MessageList
           messages={page.messages}

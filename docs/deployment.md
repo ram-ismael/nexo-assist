@@ -30,7 +30,7 @@ Um projeto Vercel (Next.js, runtime Node) + um banco Neon. Não há servidor Nod
 
 ## A cada release: migrações
 
-Migrações são um passo explícito, nunca automático no build:
+Migrações são um passo explícito, nunca automático no build, e rodam **antes** do deploy (o código novo lê as colunas novas; o antigo as ignora):
 
 ```bash
 DATABASE_URL="<string direta do Neon>" pnpm db:migrate
@@ -59,4 +59,4 @@ Produção em https://nexo-assist-two.vercel.app (projeto Vercel `nexo-assist`, 
 ## Rollback
 
 - Aplicação: no painel da Vercel, _Promote_ o deploy anterior (ou `vercel rollback`).
-- Banco: as migrações são aditivas (só índices novos desde a `0000`), então um deploy anterior roda sobre o schema novo sem mudança. Antes de uma migração destrutiva, criar um branch do Neon como ponto de restauração.
+- Banco: as migrações são aditivas (índices e colunas anuláveis desde a `0000`), então um deploy anterior roda sobre o schema novo sem mudança. Antes de uma migração destrutiva, criar um branch do Neon como ponto de restauração.

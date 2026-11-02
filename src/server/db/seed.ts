@@ -25,7 +25,7 @@ type SeedUser = {
   deviceOs?: string;
 };
 
-export const SEED_USERS: SeedUser[] = [
+const SEED_USERS: SeedUser[] = [
   {
     email: "ana.souza@nexo.com.br",
     name: "Ana Souza",
@@ -109,7 +109,7 @@ type SeedTicket = {
   resolution?: string;
 };
 
-export const SEED_TICKETS: SeedTicket[] = [
+const SEED_TICKETS: SeedTicket[] = [
   {
     number: "INC-20311",
     requester: "ana.souza@nexo.com.br",
@@ -239,7 +239,7 @@ type SeedArticle = {
   body: string;
 };
 
-export const SEED_ARTICLES: SeedArticle[] = [
+const SEED_ARTICLES: SeedArticle[] = [
   {
     id: "KB-001",
     title: "VPN com erro 809 no Windows 10",

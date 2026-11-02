@@ -18,7 +18,7 @@ export type BlockHandlers = {
   onChanged: () => Promise<void> | void;
 };
 
-export function QuickReplies({
+function QuickReplies({
   block,
   onReply,
 }: {

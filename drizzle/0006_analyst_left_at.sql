@@ -1,0 +1,1 @@
+ALTER TABLE "analyst_presence" ADD COLUMN "left_at" timestamp with time zone;

@@ -1,3 +1,4 @@
+import { analystOnline } from "@/domain/presence";
 import { describe, expect, it } from "vitest";
 import { agentMayRespond, nextState } from "@/domain/conversations";
 import { classifyPriority, type PriorityFacts } from "@/domain/priority";
@@ -160,5 +161,18 @@ describe("rankDuplicates", () => {
     expect(
       rankDuplicates({ title: "Impressora sem toner", description: "acabou o toner" }, tickets),
     ).toEqual([]);
+  });
+});
+
+describe("analystOnline", () => {
+  const now = new Date("2026-11-02T12:00:00.000Z").getTime();
+  const at = (secondsAgo: number) => new Date(now - secondsAgo * 1000);
+  it("is online only with a fresh heartbeat after the last sign-out", () => {
+    expect(analystOnline({ lastHeartbeatAt: at(10), leftAt: null }, now)).toBe(true);
+    expect(analystOnline({ lastHeartbeatAt: at(60), leftAt: null }, now)).toBe(false);
+    // Signed out: the same instant is recorded for both.
+    expect(analystOnline({ lastHeartbeatAt: at(5), leftAt: at(5) }, now)).toBe(false);
+    // Back on the console after leaving.
+    expect(analystOnline({ lastHeartbeatAt: at(2), leftAt: at(300) }, now)).toBe(true);
   });
 });

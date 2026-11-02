@@ -9,19 +9,11 @@ import { liveShowcase, publicMetrics } from "@/server/metrics";
 
 export const metadata: Metadata = { title: "Entrar" };
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | undefined>>;
-}) {
+export default async function LoginPage() {
   const user = await getCurrentUser();
   if (user) redirect(homeFor(user));
   const timeZone = config().calendar.timeZone;
-  const [metrics, live, params] = await Promise.all([
-    publicMetrics(),
-    liveShowcase(timeZone),
-    searchParams,
-  ]);
+  const [metrics, live] = await Promise.all([publicMetrics(), liveShowcase(timeZone)]);
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.25fr_1fr]">
@@ -41,14 +33,6 @@ export default async function LoginPage({
           <p className="text-ink-3 mt-2 text-[15px]">
             Use seu e-mail corporativo e a senha da rede Nexo.
           </p>
-          {params.expirada ? (
-            <p
-              role="status"
-              className="bg-warning-soft text-warning-text mt-5 rounded-md px-3 py-2 text-sm"
-            >
-              Sua sessão expirou. Entre novamente para continuar.
-            </p>
-          ) : null}
           <LoginForm />
         </div>
         <footer className="text-ink-3 flex flex-wrap items-center justify-between gap-2 text-[13px]">

@@ -9,7 +9,7 @@ import {
   contactLabel,
   durationLabel,
   formatListTime,
-  lastSeenLabel,
+  presenceLabel,
   untilLabel,
 } from "@/lib/format";
 
@@ -104,15 +104,12 @@ describe("durationLabel", () => {
   });
 });
 
-describe("lastSeenLabel", () => {
-  const now = new Date("2026-10-30T13:00:00.000Z"); // 10:00 in São Paulo
-  const tz = "America/Sao_Paulo";
+describe("presenceLabel", () => {
+  const now = new Date("2026-10-30T13:00:00.000Z");
   it("reads like a messaging app", () => {
-    expect(lastSeenLabel("2026-10-30T12:42:00.000Z", tz, now)).toBe(
-      "visto por último hoje às 09:42",
-    );
-    expect(lastSeenLabel("2026-10-29T21:20:00.000Z", tz, now)).toBe(
-      "visto por último ontem às 18:20",
-    );
+    expect(presenceLabel(true, "2026-10-30T12:59:50.000Z", now)).toBe("Online");
+    expect(presenceLabel(false, "2026-10-30T12:55:00.000Z", now)).toBe("Offline há 5 min");
+    expect(presenceLabel(false, "2026-10-30T10:00:00.000Z", now)).toBe("Offline há 3 h");
+    expect(presenceLabel(false, null, now)).toBe("Offline");
   });
 });

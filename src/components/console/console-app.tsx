@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { ConversationDetailDTO, QueueResponseDTO, TicketListItemDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
+import { ANALYST_HEARTBEAT_MS } from "@/domain/presence";
 import { LogoSymbol } from "@/components/brand/logo";
 import { useLogout } from "@/components/layout/employee-shell";
 import { Avatar } from "@/components/ui/avatar";
@@ -146,13 +147,30 @@ function Console({ analyst, timeZone }: { analyst: Analyst; timeZone: string }) 
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["presence"] }),
     onError: (error) => toast("error", errorMessage(error)),
   });
-  // Heartbeat while the console is open: drives "analistas online agora".
-  const heartbeat = setAvailability.mutate;
+  // Heartbeat while the console is open: drives the analyst's "Online" for the
+  // employee and "analistas online agora". Closing the tab says so right away.
+  // Failures are silent: a missed beat only shows the analyst offline for a while.
   useEffect(() => {
-    heartbeat(undefined);
-    const timer = setInterval(() => heartbeat(undefined), 60_000);
-    return () => clearInterval(timer);
-  }, [heartbeat]);
+    const beat = (body: { leaving?: true } = {}) =>
+      void fetch("/api/analysts/presence", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        keepalive: !!body.leaving,
+      }).catch(() => undefined);
+    beat();
+    const timer = setInterval(beat, ANALYST_HEARTBEAT_MS);
+    const onShow = (event: PageTransitionEvent) => event.persisted && beat();
+    const onHide = () => beat({ leaving: true });
+    window.addEventListener("pageshow", onShow);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, []);
 
   const select = (id: string | null) => {
     const next = new URLSearchParams(params.toString());
@@ -341,6 +359,7 @@ function SelectedConversation({
   const queryClient = useQueryClient();
   const feed = useFeed(conversationId);
   const lastSeq = feed.messages[feed.messages.length - 1]?.seq;
+  const state = feed.conversation?.state;
   // Opening (and following) a conversation marks it as read for the queue counters.
   useEffect(() => {
     if (lastSeq === undefined) return;
@@ -348,5 +367,12 @@ function SelectedConversation({
       .then(() => queryClient.invalidateQueries({ queryKey: ["queue"] }))
       .catch(() => undefined);
   }, [conversationId, lastSeq, queryClient]);
+  // Every new message or state change may come with a ticket created, updated
+  // or put in focus by the agent: refresh the side panels now, not on their timer.
+  useEffect(() => {
+    if (lastSeq === undefined) return;
+    void queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+    void queryClient.invalidateQueries({ queryKey: ["tickets"] });
+  }, [conversationId, lastSeq, state, queryClient]);
   return <ConversationPanel feed={feed} {...rest} />;
 }

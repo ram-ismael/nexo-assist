@@ -7,6 +7,7 @@ import type { AssistantStatus } from "@/domain/assistant";
 import type { ConversationDTO, MessageDTO, MessagePageDTO } from "@/lib/api-types";
 import { api, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
+import { presenceLabel } from "@/lib/format";
 import { PageHeader } from "@/components/layout/employee-shell";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -43,6 +44,17 @@ const ASSISTANT_PILL: Record<AssistantStatus, { text: string; tone: string; dot:
   },
 };
 
+/** The analyst serving the employee, with real presence: "Rafael Lima · Offline há 5 min". */
+function analystPill(analyst: ConversationDTO["assignedAnalyst"]) {
+  const name = analyst?.name ?? "Analista";
+  const online = !!analyst?.online;
+  return {
+    text: `${name} · ${presenceLabel(online, analyst?.lastSeenAt ?? null)}`,
+    tone: online ? "bg-success-soft text-success-text" : "bg-desk text-ink-2",
+    dot: online ? "bg-success" : "bg-ink-4",
+  };
+}
+
 function StatusPill({
   conversation,
   assistant,
@@ -59,11 +71,7 @@ function StatusPill({
           dot: "bg-warning",
         }
       : state === "analyst_active"
-        ? {
-            text: `${conversation?.assignedAnalyst?.name ?? "Analista"} atendendo`,
-            tone: "bg-success-soft text-success-text",
-            dot: "bg-success",
-          }
+        ? analystPill(conversation?.assignedAnalyst ?? null)
         : state === "closed"
           ? { text: "Conversa encerrada", tone: "bg-desk text-ink-3", dot: "bg-ink-4" }
           : ASSISTANT_PILL[assistant];
@@ -275,6 +283,7 @@ export function ChatView({
             onLoadOlder={chat.loadOlder}
             handlersFor={handlersFor}
             pending={pending}
+            onPendingRevealed={chat.revealed}
             empty={
               <div className="mx-auto mt-[8vh] max-w-[560px] text-center">
                 <h1 className="font-display text-ink text-[34px] leading-tight">

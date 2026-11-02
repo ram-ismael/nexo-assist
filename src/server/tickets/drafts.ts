@@ -16,7 +16,7 @@ import { TicketService } from "./service";
 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
-export type CreateDraftInput = {
+type CreateDraftInput = {
   employeeId: string;
   conversationId: string;
   turnId: string | null;
@@ -137,7 +137,7 @@ export async function findDraftForEmployee(
   return draft;
 }
 
-export type DraftEdit = {
+type DraftEdit = {
   expectedVersion: number;
   title?: string;
   description?: string;
@@ -206,7 +206,7 @@ function assertPending(draft: DraftRow, now: Date): void {
   }
 }
 
-export type ConfirmResult = { ticket: TicketRow; draft: DraftRow; alreadyConfirmed: boolean };
+type ConfirmResult = { ticket: TicketRow; draft: DraftRow; alreadyConfirmed: boolean };
 
 /**
  * The only path that creates, updates or reopens a ticket on behalf of an

@@ -4,8 +4,8 @@ import type { Executor } from "@/server/db/client";
 import { sessions, users } from "@/server/db/schema";
 
 export const SESSION_COOKIE = "nexo_session";
-export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-export const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type SessionUser = {
   id: string;
@@ -18,7 +18,7 @@ export type SessionUser = {
   sessionId: string;
 };
 
-export function hashToken(token: string): string {
+function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 

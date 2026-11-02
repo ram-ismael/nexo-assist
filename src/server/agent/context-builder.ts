@@ -14,10 +14,9 @@ import {
 } from "@/server/conversations/repository";
 
 /** Recent messages replayed to the model. Older context lives in tickets and handoffs. */
-export const CONTEXT_MESSAGES = 16;
+const CONTEXT_MESSAGES = 16;
 
-export type ModelMessage =
-  { role: "user"; content: string } | { role: "assistant"; content: string };
+type ModelMessage = { role: "user"; content: string } | { role: "assistant"; content: string };
 
 function describeBlock(block: MessageBlock): string {
   switch (block.type) {

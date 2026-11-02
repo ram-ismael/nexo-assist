@@ -17,7 +17,7 @@ export const INTENTS = [
   "esclarecimento",
   "outro",
 ] as const;
-export type Intent = (typeof INTENTS)[number];
+type Intent = (typeof INTENTS)[number];
 
 export type DecisionInput = {
   intent: Intent;

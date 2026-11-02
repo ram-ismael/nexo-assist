@@ -1,10 +1,9 @@
 "use client";
 
-import { ArrowUp, Send } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 
 const MAX_LENGTH = 2000;
 
@@ -26,6 +25,7 @@ function writeDraft(key: string, value: string): void {
 }
 
 /**
+ * The one message field of the app, identical for the employee and the analyst.
  * Enter sends, Shift+Enter breaks the line. The unsent text survives refresh
  * (local draft, never authoritative) and failed sends.
  */
@@ -35,7 +35,6 @@ export function Composer({
   disabled,
   busy,
   onSend,
-  variant = "employee",
   maxLength = MAX_LENGTH,
   typing,
   autoFocus,
@@ -45,7 +44,6 @@ export function Composer({
   disabled?: boolean;
   busy?: boolean;
   onSend: (text: string) => Promise<boolean>;
-  variant?: "employee" | "console";
   maxLength?: number;
   /** "Está escrevendo…" signal for the other person, when one is listening. */
   typing?: { onTextChange: (text: string) => void; onBlur: () => void; onSent: () => void };
@@ -95,7 +93,6 @@ export function Composer({
         className={cn(
           "bg-paper focus-within:border-primary focus-within:ring-primary/15 flex items-end gap-2 rounded-xl border p-2 transition-colors focus-within:ring-2",
           tooLong ? "border-danger" : "border-rule",
-          variant === "console" && "bg-desk focus-within:bg-paper rounded-2xl border-transparent",
           disabled && "opacity-70",
         )}
       >
@@ -119,28 +116,15 @@ export function Composer({
           placeholder={placeholder}
           className="text-ink placeholder:text-ink-3 max-h-[180px] min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-[15px] leading-6 outline-none disabled:cursor-not-allowed sm:text-[16px]"
         />
-        {variant === "employee" ? (
-          <Button
-            onClick={submit}
-            disabled={disabled || !value.trim() || tooLong}
-            loading={busy}
-            className="h-10 px-4"
-          >
-            {!busy ? <ArrowUp className="size-4" aria-hidden="true" /> : null}
-            Enviar
-          </Button>
-        ) : (
-          <button
-            type="button"
-            onClick={submit}
-            disabled={disabled || !value.trim() || tooLong || busy}
-            aria-label={busy ? "Enviando mensagem" : "Enviar mensagem"}
-            aria-busy={busy || undefined}
-            className="bg-cta hover:bg-cta-hover flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-[background-color,transform,opacity] duration-150 active:scale-95 disabled:opacity-50"
-          >
-            {busy ? <Spinner className="size-5" /> : <Send className="size-5" aria-hidden="true" />}
-          </button>
-        )}
+        <Button
+          onClick={submit}
+          disabled={disabled || !value.trim() || tooLong}
+          loading={busy}
+          className="h-10 px-4"
+        >
+          {!busy ? <ArrowUp className="size-4" aria-hidden="true" /> : null}
+          Enviar
+        </Button>
       </div>
       {tooLong ? (
         <p className="text-danger-text mt-1 text-[13px]">

@@ -16,13 +16,12 @@ import { STATE_LABEL } from "@/domain/conversations";
 import type { ConversationDetailDTO, MessageDTO } from "@/lib/api-types";
 import { api, ApiRequestError, errorMessage, newClientId } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { contactLabel, lastSeenLabel } from "@/lib/format";
+import { contactLabel, presenceLabel } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { Composer } from "@/components/chat/composer";
-import { MessageList } from "@/components/chat/message-list";
+import { MessageList, MessagesError, MessagesSkeleton } from "@/components/chat/message-list";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { useTypingSignal } from "@/components/chat/use-typing-signal";
 import type { useFeed } from "./use-feed";
@@ -116,17 +115,16 @@ export function ConversationPanel({
     }
   }
 
-  if (feed.loading && !conversation) {
+  if (!conversation) {
     return (
-      <div className="bg-chat flex h-full items-center justify-center">
-        <Spinner label="Carregando conversa" className="text-ink-3 size-6" />
-      </div>
-    );
-  }
-  if (feed.error || !conversation) {
-    return (
-      <div className="bg-chat text-ink-3 flex h-full items-center justify-center p-6 text-center text-[15px]">
-        {feed.error ?? "Selecione uma conversa"}
+      <div className="bg-chat flex h-full flex-col">
+        {feed.loading ? (
+          <MessagesSkeleton layout="console" />
+        ) : feed.error ? (
+          <MessagesError message={feed.error} onRetry={feed.reload} />
+        ) : (
+          <p className="text-ink-3 m-auto p-6 text-center text-[15px]">Selecione uma conversa</p>
+        )}
       </div>
     );
   }
@@ -168,11 +166,9 @@ export function ConversationPanel({
         <div className="min-w-0 flex-1">
           <p className="truncate text-[17px] font-medium">{conversation.employee.name}</p>
           <p className="text-ink-3 truncate text-[14px]">
-            {conversation.employeeOnline ? (
-              <span className="text-success-text">online · </span>
-            ) : conversation.employeeLastSeenAt ? (
-              <span>{lastSeenLabel(conversation.employeeLastSeenAt, timeZone)} · </span>
-            ) : null}
+            <span className={cn(conversation.employeeOnline && "text-success-text")}>
+              {presenceLabel(conversation.employeeOnline, conversation.employeeLastSeenAt)} ·{" "}
+            </span>
             {conversation.employee.department}
             {detail?.focusTicketNumber ? ` · ${detail.focusTicketNumber}` : ""}
           </p>
@@ -260,32 +256,38 @@ export function ConversationPanel({
         </div>
       ) : null}
 
-      <MessageList
-        key={conversation.id}
-        messages={visibleMessages}
-        viewer="analyst"
-        layout="console"
-        timeZone={timeZone}
-        hasMoreBefore={term ? false : feed.hasMoreBefore}
-        loadingOlder={feed.loadingOlder}
-        olderError={feed.olderError}
-        onLoadOlder={feed.loadOlder}
-        handlersFor={() => ({ onChanged: () => undefined })}
-        outgoing={outgoing}
-        readUpTo={conversation.employeeReadSeq}
-        typing={
-          term ? null : conversation.typing.employee ? (
-            <TypingIndicator name={firstName ?? "Funcionário"} align="left" tone="paper" />
-          ) : state === "agent_active" && conversation.agentBusy ? (
-            <TypingIndicator name="Nexo Assist" align="right" tone="agent" />
-          ) : null
-        }
-        empty={
-          <p className="text-ink-3 py-10 text-center text-[14px]">
-            {term ? "Nenhuma mensagem encontrada." : "Sem mensagens ainda."}
-          </p>
-        }
-      />
+      {feed.loading ? (
+        <MessagesSkeleton layout="console" />
+      ) : feed.error ? (
+        <MessagesError message={feed.error} onRetry={feed.reload} />
+      ) : (
+        <MessageList
+          key={conversation.id}
+          messages={visibleMessages}
+          viewer="analyst"
+          layout="console"
+          timeZone={timeZone}
+          hasMoreBefore={term ? false : feed.hasMoreBefore}
+          loadingOlder={feed.loadingOlder}
+          olderError={feed.olderError}
+          onLoadOlder={feed.loadOlder}
+          handlersFor={() => ({ onChanged: () => undefined })}
+          outgoing={outgoing}
+          readUpTo={conversation.employeeReadSeq}
+          typing={
+            term ? null : conversation.typing.employee ? (
+              <TypingIndicator name={firstName ?? "Funcionário"} align="left" tone="paper" />
+            ) : state === "agent_active" && conversation.agentBusy ? (
+              <TypingIndicator name="Nexo Assist" align="right" tone="agent" />
+            ) : null
+          }
+          empty={
+            <p className="text-ink-3 py-10 text-center text-[14px]">
+              {term ? "Nenhuma mensagem encontrada." : "Sem mensagens ainda."}
+            </p>
+          }
+        />
+      )}
 
       <footer className="border-rule bg-paper shrink-0 border-t px-4 py-3 sm:px-6">
         {mine ? (
@@ -311,7 +313,6 @@ export function ConversationPanel({
             <Composer
               draftKey={`nexo-console-${conversation.id}`}
               placeholder={`Responder para ${firstName}…`}
-              variant="console"
               maxLength={4000}
               busy={outgoing !== null}
               typing={typingSignal}
@@ -364,12 +365,16 @@ export function ConversationPanel({
               </p>
             )}
             {state !== "closed" && !other ? (
-              <p
-                className="bg-desk text-ink-3 mt-3 rounded-2xl px-5 py-3 text-[15px]"
-                aria-disabled="true"
-              >
-                Assuma o atendimento para responder
-              </p>
+              // The same field the analyst gets after assuming, only locked.
+              <div className="mt-3">
+                <Composer
+                  draftKey={`nexo-console-${conversation.id}`}
+                  placeholder="Assuma o atendimento para responder"
+                  maxLength={4000}
+                  disabled
+                  onSend={async () => false}
+                />
+              </div>
             ) : null}
           </>
         )}
