@@ -285,7 +285,17 @@ export async function runAgentTurn(
     requestContext.set("turn", turn);
 
     const output = await nexoAgent(resolved).stream(toModelMessages(history, names), {
-      instructions: `${AGENT_INSTRUCTIONS}\n\n${facts}`,
+      // The rules (and the tool definitions before them) are the same on every
+      // step of every turn: cached by Anthropic, they are not paid or processed
+      // again. Only the turn's facts change.
+      instructions: [
+        {
+          role: "system",
+          content: AGENT_INSTRUCTIONS,
+          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+        },
+        { role: "system", content: facts },
+      ],
       requestContext,
       maxSteps: 8,
       abortSignal: abort.signal,
@@ -307,6 +317,7 @@ export async function runAgentTurn(
       latencyMs: Date.now() - started,
       firstTokenMs,
       inputTokens: usage?.inputTokens ?? null,
+      cachedInputTokens: usage?.cachedInputTokens ?? null,
       outputTokens: usage?.outputTokens ?? null,
       model: resolved.id,
     });
@@ -346,6 +357,7 @@ async function finishTurn(
     latencyMs: number;
     firstTokenMs: number | null;
     inputTokens: number | null;
+    cachedInputTokens: number | null;
     outputTokens: number | null;
     model: string;
   },
@@ -439,6 +451,7 @@ async function finishTurn(
     latencyMs: metrics.latencyMs,
     firstTokenMs: metrics.firstTokenMs,
     inputTokens: metrics.inputTokens,
+    cachedInputTokens: metrics.cachedInputTokens,
     outputTokens: metrics.outputTokens,
     discarded: outcome.discarded,
     handedOff: turn.handedOff,
