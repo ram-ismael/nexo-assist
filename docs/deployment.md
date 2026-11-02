@@ -41,8 +41,11 @@ DATABASE_URL="<string direta do Neon>" pnpm db:seed   # idempotente; só insere 
 
 ## Deploy da aplicação
 
-- Merge em `main` → deploy de produção automático pela integração GitHub.
-- Ou manual: `vercel deploy --prod`.
+- A Vercel está ligada ao repositório (`ram-ismael/nexo-assist`, branch de produção `main`):
+  - push em `dev` → deploy de _preview_;
+  - merge do PR `dev → main` → deploy de produção automático.
+- Migrações continuam manuais e vêm **antes** do merge quando o release traz uma.
+- Manual, se preciso: `vercel deploy --prod` a partir de `main`.
 
 ## Verificação pós-deploy
 
