@@ -1,28 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { resetConfigForTests } from "@/lib/config";
 import type { SessionUser } from "@/server/auth/sessions";
 import { db } from "@/server/db/client";
+import { clearBusinessData } from "@/server/db/reset";
 import { users } from "@/server/db/schema";
 import { seedDatabase } from "@/server/db/seed";
 import { resetBreakerForTests } from "@/server/tickets/gateway";
-
-const TABLES = [
-  "agent_actions",
-  "agent_decisions",
-  "agent_turns",
-  "ticket_drafts",
-  "handoffs",
-  "messages",
-  "conversations",
-  "ticket_events",
-  "tickets",
-  "sessions",
-  "analyst_presence",
-  "audit_events",
-  "rate_limits",
-  "knowledge_articles",
-  "users",
-];
 
 export const calendar = {
   timeZone: "America/Sao_Paulo",
@@ -35,9 +18,7 @@ export const calendar = {
 export async function resetDatabase(): Promise<void> {
   resetConfigForTests();
   resetBreakerForTests();
-  await db().execute(sql.raw(`truncate ${TABLES.join(", ")} restart identity cascade`));
-  await db().execute(sql`select setval('inc_number_seq', 20520, false)`);
-  await db().execute(sql`select setval('req_number_seq', 10460, false)`);
+  await clearBusinessData(db());
   await seedDatabase(db(), calendar);
 }
 

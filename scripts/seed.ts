@@ -4,6 +4,14 @@ import { parseHolidays } from "@/domain/sla";
 import * as schema from "@/server/db/schema";
 import { seedDatabase } from "@/server/db/seed";
 import { seedConversations } from "@/server/db/seed-conversations";
+import { clearBusinessData } from "@/server/db/reset";
+
+/**
+ * `--reset` (pnpm db:reset-demo) first erases every business table, so the
+ * demo starts over with ages relative to today. It refuses to run unless
+ * CONFIRM_RESET_DEMO names the database being erased.
+ */
+const RESET = process.argv.includes("--reset");
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -11,6 +19,16 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString: url, max: 1 });
   try {
     const db = drizzle(pool, { schema });
+    if (RESET) {
+      const database = new URL(url).hostname || "localhost";
+      if (process.env.CONFIRM_RESET_DEMO !== database) {
+        throw new Error(
+          `--reset apaga todos os dados de ${database}. Para confirmar: CONFIRM_RESET_DEMO=${database}`,
+        );
+      }
+      await clearBusinessData(db);
+      console.log(`Dados de ${database} apagados.`);
+    }
     const calendar = {
       timeZone: process.env.BUSINESS_TIMEZONE ?? "America/Sao_Paulo",
       dayStartHour: Number(process.env.BUSINESS_DAY_START ?? 8),
